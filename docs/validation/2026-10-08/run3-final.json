@@ -1,0 +1,63 @@
+{
+  "needs_regrade": false,
+  "decision": "same_band",
+  "final_band": 3,
+  "final_score": 8.5,
+  "final_range": [
+    7,
+    9
+  ],
+  "dimensions": [
+    {
+      "name": "切题与图表解读",
+      "max": 5,
+      "score": 3.25,
+      "note": "A给3.5，B给3，均值3.25"
+    },
+    {
+      "name": "内容展开与评论",
+      "max": 3,
+      "score": 1.5,
+      "note": "A给1，B给2，均值1.5"
+    },
+    {
+      "name": "组织与段落逻辑",
+      "max": 2,
+      "score": 1.5,
+      "note": "A给1.5，B给1.5，均值1.5"
+    },
+    {
+      "name": "语法与句式控制",
+      "max": 2,
+      "score": 1.0,
+      "note": "A给1，B给1，均值1"
+    },
+    {
+      "name": "词汇与搭配",
+      "max": 2,
+      "score": 0.5,
+      "note": "A给0.5，B给0.5，均值0.5"
+    },
+    {
+      "name": "格式与卷面",
+      "max": 1,
+      "score": 1.0,
+      "note": "A给1，B给1，均值1"
+    }
+  ],
+  "rationale": "两位阅卷员同档（band_gap=0），按 rubric 第7节逐维取均值、总分收敛至0.5粒度（尾数从严），由脚本确定性合并。",
+  "initial": [
+    {
+      "grader": "A",
+      "band": 3,
+      "score": 8.5
+    },
+    {
+      "grader": "B",
+      "band": 3,
+      "score": 9
+    }
+  ],
+  "band_gap": 0,
+  "score_gap": 0.5
+}

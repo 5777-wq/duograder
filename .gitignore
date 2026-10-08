@@ -1,0 +1,13 @@
+# 自用 App 版（私有，不随开源仓库发布）
+/app/
+
+# 数据与密钥
+node_modules/
+dist/
+.env*
+*.local
+data/
+
+# 系统
+.DS_Store
+Thumbs.db

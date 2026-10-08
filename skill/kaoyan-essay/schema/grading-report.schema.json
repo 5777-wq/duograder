@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "duograder/grading-report/v1",
+  "title": "DuoGrader 单评报告",
+  "description": "双评中每位评分者的独立输出。字段约束与 rubrics/writing-rubric.md 第 5-7 节对应，前端/脚本负责校验 consistency，不通过即打回重评。",
+  "type": "object",
+  "required": ["meta", "band", "scores", "consistency", "sentence_edits", "improved_version", "top_problems"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["exam_track", "task", "max_score", "word_count_reported"],
+      "properties": {
+        "exam_track": { "enum": ["english-i", "english-ii"] },
+        "task": { "enum": ["small", "large"] },
+        "max_score": { "enum": [10, 15, 20] },
+        "prompt_source": { "type": ["string", "null"], "description": "如 '2024 英语二 Part B'；用户未提供题面时为 null 且切题维度标记暂定" },
+        "word_count_reported": { "type": "integer", "description": "预检脚本给出的字数。评分者只引用，不得自算" }
+      }
+    },
+    "band": {
+      "type": "object",
+      "required": ["band", "range", "rationale"],
+      "properties": {
+        "band": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "range": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+        "rationale": { "type": "string", "minLength": 20, "description": "必须引用 rubric 第 2 节档位描述的关键词" }
+      }
+    },
+    "scores": {
+      "type": "object",
+      "required": ["total", "dimensions"],
+      "properties": {
+        "total": { "type": "number" },
+        "dimensions": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": ["name", "max", "score", "evidence"],
+            "properties": {
+              "name": { "type": "string" },
+              "max": { "type": "number" },
+              "score": { "type": "number", "minimum": 0 },
+              "evidence": { "type": "string", "minLength": 5, "description": "考生原文片段；禁止空泛评语" },
+              "deduction_reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "required": ["dimension_sum", "in_band_range"],
+      "properties": {
+        "dimension_sum": { "type": "number" },
+        "in_band_range": { "type": "boolean" },
+        "adjustments": { "type": "string", "description": "若初次校验不通过，记录调整过程" }
+      }
+    },
+    "sentence_edits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["original", "severity", "issue", "revised"],
+        "properties": {
+          "original": { "type": "string", "description": "逐字复制考生原句，不得转写或修正" },
+          "issue_type": { "enum": ["grammar", "spelling", "collocation", "chinglish", "cohesion", "format", "punctuation", "word-choice"] },
+          "severity": { "enum": ["error", "awkward", "style"] },
+          "issue": { "type": "string", "description": "中文说明问题所在；severity=style 时不得使用'错误'措辞" },
+          "revised": { "type": "string", "description": "仅使用考研中等偏上水平可达成的表达" }
+        }
+      }
+    },
+    "improved_version": { "type": "string", "description": "基于考生原作的考试可用升级版，保留其立意与结构" },
+    "top_problems": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3, "description": "最限制得分的 2-3 个问题，按影响排序" },
+    "practice_advice": { "type": "string", "description": "一条可立即执行的训练方法" },
+    "reusable": {
+      "type": "object",
+      "properties": {
+        "patterns": { "type": "array", "items": { "type": "string" }, "description": "本篇可复用的句式骨架" },
+        "words": { "type": "array", "items": { "type": "string" }, "description": "话题词汇与搭配" }
+      }
+    }
+  }
+}
