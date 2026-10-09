@@ -1,5 +1,7 @@
 # 自用 App 版（私有，不随开源仓库发布）
-/app/
+app/*
+!app/core.js
+!app/test.mjs
 
 # 数据与密钥
 node_modules/
