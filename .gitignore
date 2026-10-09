@@ -11,3 +11,6 @@ data/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 部署暂存目录
+.pages-dist/

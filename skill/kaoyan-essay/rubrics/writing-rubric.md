@@ -1,4 +1,6 @@
-# 考研英语写作评分规则（writing-rubric v1）
+# 考研英语写作评分规则（writing-rubric v1.3）
+
+> v1.3 变更：新增第 5.1 节中式直译速查表（种子错误评估发现 awkward 级中式直译被系统性漏检，见 data/kernel-eval-20261009）。
 
 本文件是 DuoGrader 评分的唯一依据。任何评分者（模型或人工）在打分前必须完整加载本规则，并按第 6 节流程执行。
 
@@ -107,6 +109,27 @@
 - 判定拿不准是不是 `error` 时，一律降级为 `awkward`。
 - `original` 字段必须逐字复制考生原文，不得转写、不得顺手修正。
 - `improved_version` 只能使用考研中等偏上水平考生**下次自己能写出**的表达：禁止超纲词、禁止炫技修辞。修改版的标准是"可学习"，不是"母语者会怎么写"。
+
+### 5.1 中式直译速查表（awkward 级扫描清单，v1.3 新增）
+
+语法成立但属中式直译/含混的表达，最易被漏判——**逐句扫描时必须额外对照本表**，命中即按表定级：
+
+| 中式表达 | 地道替换 | 级别 |
+|---|---|---|
+| grow up better（更好地成长） | develop more fully / make greater progress | awkward |
+| the situation of ... taking part in（…参加…的情况） | how often ... take part in / participation in | awkward |
+| learn knowledge | gain / acquire knowledge | error |
+| make our country more and more beautiful | make our country a better place | awkward |
+| I very like it | I like it very much | error |
+| Body is very important | Good health is very important | awkward |
+| with the development of society（开头套话滥用） | as society develops（点题后立即转入正题） | style |
+| more and more people（全文反复） | an increasing number of people（轮换） | style |
+| let students to do | let students do / encourage students to do | error |
+| play an important role in（一篇超过 2 次） | 轮换：be essential to / contribute to | style |
+| become more and more + adj（超过 2 次） | become increasingly + adj | style |
+| in a word（结尾） | in conclusion / to sum up | style |
+
+速查表的判定效力优先于"拿不准降级"规则：表中命中项**必须**按表定级，不得标为 style 以外的降级（表中标 error 的不得降为 awkward）。
 
 ## 6. 评分流程
 

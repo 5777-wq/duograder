@@ -1,0 +1,14 @@
+[
+  { "id": "pct-35", "pattern": "35 percentage", "expected": "error", "note": "percentage 误用 ×3 之一" },
+  { "id": "pct-45", "pattern": "45 percentage", "expected": "error", "note": "percentage 误用 ×3 之二" },
+  { "id": "pct-20", "pattern": "20 percentage students", "expected": "error", "note": "percentage 误用 + 缺 of" },
+  { "id": "aux-provides", "pattern": "does not provides", "expected": "error", "note": "助动词后动词形式" },
+  { "id": "comma-splice", "pattern": "volunteer activities, many students", "expected": "error", "note": "逗号粘连" },
+  { "id": "agr-is", "pattern": "volunteer activities is", "expected": "error", "note": "主谓一致" },
+  { "id": "pl-skill", "pattern": "learn skill", "expected": "error", "note": "可数名词裸单数" },
+  { "id": "pl-friend", "pattern": "make friend", "expected": "error", "note": "可数名词裸单数" },
+  { "id": "spell-pheno", "pattern": "phenomonon", "expected": "error", "note": "拼写" },
+  { "id": "dup-the", "pattern": "the the", "expected": "error", "note": "相邻重复词（预检也应抓到）" },
+  { "id": "ching-grow", "pattern": "grow up better", "expected": "awkward", "note": "中式直译，按 rubric 应标 awkward 不扣分" },
+  { "id": "ching-situation", "pattern": "the situation of students taking part in", "expected": "awkward", "note": "含混直译，awkward" }
+]
