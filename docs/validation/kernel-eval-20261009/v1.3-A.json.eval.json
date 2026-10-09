@@ -1,0 +1,8 @@
+{
+  "seeds": 12,
+  "detected": 12,
+  "missed": [],
+  "wrong_severity": [],
+  "fp_candidates": [],
+  "recall": 1.0
+}

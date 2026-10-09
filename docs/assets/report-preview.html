@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>报告预览渲染</title>
+<style>
+body { margin:0; padding:24px; background:#f0f2f5; font-family:"Inter",-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; font-size:15px; line-height:1.65; color:#16181d; }
+.pv { max-width:760px; margin:0 auto; }
+.card { background:#fff; border:1px solid rgba(16,24,40,.05); border-radius:20px; padding:24px; margin-top:18px; box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 28px -8px rgba(16,24,40,.08); }
+.card h2 { font-size:16px; font-weight:600; margin:0 0 14px; display:flex; align-items:center; gap:9px; letter-spacing:-.2px; }
+.dot { width:7px; height:7px; border-radius:50%; background:#d97757; flex:none; }
+.score-hero { display:flex; align-items:center; gap:18px; padding:4px 2px 14px; border-bottom:1px solid #eef0f3; margin-bottom:14px; flex-wrap:wrap; }
+.score-big { font-family:Georgia,"Songti SC",serif; font-size:52px; line-height:1; font-weight:600; background:linear-gradient(135deg,#ef8d5e,#c8532e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.score-big small { font-size:19px; color:#707579; font-weight:400; -webkit-text-fill-color:#707579; }
+.score-meta { font-size:13px; color:#707579; display:grid; grid-template-columns:auto auto; gap:2px 14px; }
+.score-meta b { color:#3c4048; font-weight:600; }
+.dual-note { background:#f7f8fa; border:1px solid #eef0f3; border-radius:12px; padding:10px 14px; font-size:12.5px; color:#707579; margin-bottom:14px; }
+.flag-line { font-size:12.5px; color:#a97a17; background:#faf3e0; border-radius:9px; padding:7px 11px; margin:8px 0; }
+table.rep { width:100%; border-collapse:collapse; font-size:13px; }
+table.rep th { text-align:left; color:#707579; font-weight:500; font-size:12px; padding:7px 8px; border-bottom:1px solid #eef0f3; }
+table.rep td { padding:9px 8px; border-bottom:1px solid #f0f1f4; vertical-align:top; color:#3c4048; }
+table.rep tr:last-child td { border-bottom:none; }
+.num { font-variant-numeric:tabular-nums; font-weight:600; color:#16181d; }
+.chip { display:inline-block; padding:1px 9px; border-radius:999px; font-size:11px; font-weight:600; letter-spacing:.3px; }
+.chip.error { background:#fdeceb; color:#e53935; }
+.chip.awkward { background:#faf3e0; color:#a97a17; }
+.en { font-family:Georgia,serif; font-style:italic; }
+.problems { margin:0; padding-left:18px; }
+.problems li { margin:7px 0; color:#3c4048; font-size:13.5px; }
+.advice { background:#eaf5e9; border-radius:12px; padding:12px 15px; font-size:13.5px; color:#3d8c3c; margin-top:12px; }
+</style>
+</head>
+<body>
+<div class="pv">
+  <section class="card" style="margin-top:0">
+    <h2><span class="dot"></span>终裁报告</h2>
+    <div class="score-hero">
+      <div class="score-big">8.5<small> / 15</small></div>
+      <div class="score-meta">
+        <span>科目题型</span><b>英语二 · 大作文 Part B</b>
+        <span>档位</span><b>第 3 档（7–9）</b>
+        <span>字数</span><b>135 词（预检脚本）</b>
+      </div>
+    </div>
+    <div class="dual-note">⚖️ 双评过程：A 初评第3档 8.5 分 · B 初评第3档 8.5 分 · 档位差 0 · 同档取均值（尾数从严），脚本合并</div>
+    <div class="flag-line">预检 · 疑似相邻重复词: the（1 处）</div>
+    <table class="rep"><thead><tr><th style="width:32%">维度</th><th>分值</th><th>得分</th><th style="width:44%">扣分依据</th></tr></thead>
+      <tbody>
+        <tr><td>切题与图表解读</td><td class="num">5</td><td class="num" style="color:var(--accent-deep,#c8532e)">3.25</td><td>数据覆盖但 percent 误用贯穿描述句</td></tr>
+        <tr><td>内容展开与评论</td><td class="num">3</td><td class="num" style="color:#c8532e">1.5</td><td>原因和评论都只有单句列举</td></tr>
+        <tr><td>组织与段落逻辑</td><td class="num">2</td><td class="num" style="color:#c8532e">1.5</td><td>三段式清晰，逗号粘连破坏局部连贯</td></tr>
+        <tr><td>语法与句式控制</td><td class="num">2</td><td class="num" style="color:#c8532e">0.75</td><td>does not provides、主谓不一致、可数名词裸用</td></tr>
+        <tr><td>词汇与搭配</td><td class="num">2</td><td class="num" style="color:#c8532e">0.5</td><td>percentage×3、grow up better 中式直译</td></tr>
+        <tr><td>格式与卷面</td><td class="num">1</td><td class="num" style="color:#c8532e">1</td><td>无扣分</td></tr>
+      </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span>逐句批改（10 处，节选 5）</h2>
+    <table class="rep"><thead><tr><th style="width:42%">原句</th><th>级别</th><th style="width:40%">修改</th></tr></thead>
+      <tbody>
+        <tr><td class="en">35 percentage of students never join in volunteer activities, while 45 percentage of them…</td><td><span class="chip error">error</span></td><td>35 percent of the students never take part in volunteer activities, while 45 percent of them…</td></tr>
+        <tr><td class="en">Secondly, the school does not provides enough information about volunteer activities, many students don't know…</td><td><span class="chip error">error</span></td><td>…does not provide enough information, <b>so</b> many students do not know how to join.</td></tr>
+        <tr><td class="en">In my opinion, volunteer activities is good for students.</td><td><span class="chip error">error</span></td><td>In my opinion, volunteer activities <b>are</b> good for students.</td></tr>
+        <tr><td class="en">It can help us learn skill and make friend.</td><td><span class="chip error">error</span></td><td>They can help us learn skills and make friends.</td></tr>
+        <tr><td class="en">Only in this way can we grow up better.</td><td><span class="chip awkward">awkward</span></td><td>Only in this way can we make greater progress.<div style="font-size:12px;color:#707579;margin-top:3px">中式直译，不扣分只提示</div></td></tr>
+      </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span>最限制得分的问题</h2>
+    <ul class="problems">
+      <li>percent/percentage 误用贯穿全部数据句，图表作文核心表达失守</li>
+      <li>基础语法密度高：主谓一致、助动词后动词形式、可数名词单复数</li>
+      <li>原因与评论各仅一句，无展开，限制内容维度上限</li>
+    </ul>
+    <div class="advice">🎯 每天用「数字 + percent of the students + 谓语」句型默写三句图表数据描述，写完逐句自查三件事：主语复数动词是否用 are、does not 后是否用原形、可数名词是否加复数。</div>
+  </section>
+</div>
+</body>
+</html>

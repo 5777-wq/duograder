@@ -1,0 +1,12 @@
+{
+  "seeds": 12,
+  "detected": 11,
+  "missed": [
+    "ching-grow"
+  ],
+  "wrong_severity": [
+    "ching-situation"
+  ],
+  "fp_candidates": [],
+  "recall": 0.92
+}

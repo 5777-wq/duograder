@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 应用核心回归（字数/预检/解析/校验/合并）
+        run: node app/test.mjs
+
+      - name: 评分脚本冒烟（预检 / 报告校验 / 评估器语法）
+        run: |
+          cd skill/kaoyan-essay
+          python scripts/precheck.py --track english-ii --task large tests/fixtures/essay-synthetic-flawed.txt > /dev/null
+          python scripts/precheck.py --track english-i --task small tests/fixtures/essay-synthetic-small.txt > /dev/null
+          python scripts/validate_report.py ../../docs/validation/2026-10-08/graderA.json tests/fixtures/essay-synthetic-flawed.txt
+          python scripts/validate_report.py ../../docs/validation/2026-10-08/graderB.json tests/fixtures/essay-synthetic-flawed.txt
+          python -m py_compile scripts/eval_planted.py scripts/average_reports.py
+          echo "评分脚本冒烟通过"
