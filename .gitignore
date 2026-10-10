@@ -18,3 +18,6 @@ Thumbs.db
 # 部署暂存目录
 .pages-dist/
 __pycache__/
+
+# wrangler 本地缓存（含账户信息，不入仓）
+.wrangler/
