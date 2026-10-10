@@ -131,15 +131,34 @@ export function detectTaskType(promptText) {
   return res;
 }
 
-// —— 模型输出解析（容错：围栏、数组对象间漏逗号） ——
+// —— 模型输出解析（容错：围栏、首尾杂质、数组对象间漏逗号、JSON 后跟注释文字） ——
 export function parseModelJSON(text) {
   let raw = String(text).trim();
   raw = raw.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```\s*$/, '').trim();
   const first = raw.indexOf('{'), last = raw.lastIndexOf('}');
-  if (first > 0 || last < raw.length - 1) raw = raw.slice(Math.max(0, first), last + 1);
-  try { return { ok: true, obj: JSON.parse(raw) }; } catch (e) { /* 尝试修复 */ }
-  try { return { ok: true, obj: JSON.parse(raw.replace(/\}\s*\{\s*"/g, '},{"')), repaired: true }; }
-  catch (e) { return { ok: false, error: 'JSON 解析失败: ' + e.message }; }
+  const tries = [];
+  if (first >= 0 && last > first) tries.push(raw.slice(first, last + 1));
+  tries.push(raw);
+  let err;
+  for (const c of tries) {
+    try { return { ok: true, obj: JSON.parse(c) }; }
+    catch (e) {
+      err = e;
+      // "Unexpected non-whitespace character after JSON at position N"
+      // → JSON 本体在 N 处已结束，后面是模型的注释文字，直接截断重试
+      const m = /after JSON at position (\d+)/.exec(e.message || '');
+      if (m) {
+        try { return { ok: true, obj: JSON.parse(c.slice(0, Number(m[1]))) }; }
+        catch (e2) { err = e2; }
+      }
+      const repaired = c.replace(/\}\s*\{\s*"/g, '},{"');
+      if (repaired !== c) {
+        try { return { ok: true, obj: JSON.parse(repaired) }; }
+        catch (e2) { err = e2; }
+      }
+    }
+  }
+  return { ok: false, error: 'JSON 解析失败: ' + (err?.message || '未找到 JSON') };
 }
 
 const EPS = 0.01;

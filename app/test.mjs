@@ -32,6 +32,9 @@ ok('数组漏逗号自动修复', parseModelJSON(bad).ok === true && parseModelJ
 ok('剥围栏', parseModelJSON('```json\n{"a":1}\n```').ok === true);
 ok('带前后杂质的 JSON', parseModelJSON('报告如下：\n{"a":1}\n以上。').ok === true);
 ok('真坏 JSON 报错', parseModelJSON('not json at all').ok === false);
+// 生产事故回归：JSON 后跟含大括号的注释文字（真机阅卷员 B 实际失败模式）
+const trailing = '{"a":{"b":1}} 注：以上 JSON 中 {"x":1} 为示例，请忽略。';
+ok('JSON 后跟含大括号注释可解析', parseModelJSON(trailing).ok === true && parseModelJSON(trailing).obj.a.b === 1);
 
 console.log('报告校验（用已入库的空跑真实报告回归）');
 const rA = JSON.parse(readFileSync(new URL('graderA.json', vdir), 'utf-8'));
