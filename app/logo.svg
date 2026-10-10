@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- DuoGrader: 两根黑色评分柱 = 双盲双评，中间红色斜线 = 仲裁切分 -->
+  <rect x="8" y="6" width="14" height="52" fill="#111111"/>
+  <rect x="44" y="6" width="14" height="52" fill="#111111"/>
+  <path d="M32 58 L37 6 L40 6 L35 58 Z" fill="#E30613"/>
+</svg>

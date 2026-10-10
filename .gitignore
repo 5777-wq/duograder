@@ -1,7 +1,8 @@
-# 自用 App 版（私有，不随开源仓库发布）
-app/*
-!app/core.js
-!app/test.mjs
+# App 源码随仓库开源；只排除构建中间物与依赖
+app/android/
+app/www/
+app/node_modules/
+app/icons-gen/
 
 # 数据与密钥
 node_modules/

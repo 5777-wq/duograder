@@ -1,0 +1,45 @@
+{
+  "name": "duograder-app",
+  "private": true,
+  "version": "0.2.0",
+  "description": "DuoGrader 双评阅卷官——考研英语作文双评批改（自用桌面版）",
+  "main": "electron-main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.duograder.app",
+    "productName": "DuoGrader",
+    "files": [
+      "electron-main.cjs",
+      "icon.png",
+      "index.html",
+      "ui.js",
+      "core.js",
+      "style.css",
+      "logo.svg",
+      "../skill/**",
+      "../LICENSE",
+      "../README.md"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "icon.png"
+    },
+    "portable": {
+      "artifactName": "DuoGrader-${version}-portable.exe"
+    }
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2"
+  }
+}

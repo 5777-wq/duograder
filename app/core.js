@@ -456,6 +456,9 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
 
 export const PRESETS = [
   // status: ok=浏览器可直连 / blocked=浏览器被拦 / local=仅本地 http 页（2026-10-09 实测）
+  // invite=邀请码模式：走分享者的 Pages Function 代理（api key 存服务端，前端只持邀请码）。
+  // 同域 duograder.pages.dev 国内可直连；备用 Worker（workers.dev）仅作海外/自托管参考。
+  { id: 'invite', name: '邀请码 · 内置算力', status: 'ok', baseURL: 'https://duograder.pages.dev/v1', model: 'MiniMax-M3.1-Flash-Preview', vmodel: 'MiniMax-M3.1-Flash-Preview' },
   { id: 'deepseek', name: 'DeepSeek 官方', status: 'ok', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash' },
   { id: 'glm', name: '智谱 GLM 官方', status: 'ok', baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', vmodel: 'glm-4v-flash' },
   { id: 'kimi', name: 'Kimi 月之暗面', status: 'ok', baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', vmodel: 'moonshot-v1-8k-vision-preview' },

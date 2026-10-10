@@ -1,0 +1,10 @@
+# DuoGrader 邀请码代理
+# 密钥（MINIMAX_API_KEY / INVITE_CODE）用 `wrangler secret put` 设置，绝不写进本文件。
+name = "duograder-proxy"
+main = "worker.js"
+compatibility_date = "2026-10-10"
+
+[vars]
+UPSTREAM_BASE = "https://api.minimaxi.com/v1"
+UPSTREAM_MODEL = "MiniMax-M3.1-Flash-Preview"
+UPSTREAM_VISION_MODEL = "MiniMax-M3.1-Flash-Preview"

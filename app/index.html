@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f7f6f2" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="DuoGrader" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/svg+xml" href="logo.svg" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>DuoGrader · 双评阅卷官</title>
+<meta name="description" content="像真实考研阅卷一样批改英语作文：双盲评分 + 分差仲裁 + 逐句精改。自带 API key，数据不出本地。" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="logo">
+      <img class="mark" src="logo.svg" alt="DuoGrader" />
+      <h1>DuoGrader</h1>
+      <small class="hide-sm">双评阅卷官 · 考研英语作文</small>
+    </div>
+    <button class="icon-btn" id="btn-login">登录</button>
+    <button class="icon-btn" id="btn-history">历史</button>
+    <button class="icon-btn" id="btn-settings">设置</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="banner-area"></div>
+
+  <section class="card main-card input-section">
+    <div class="substep">
+      <span class="stepnum">1</span>
+      <div class="substep-body">
+        <div class="substep-title">导入作文材料 <span class="substep-hint"><span class="mobile-only">题面与作文一起拍即可 · 支持 PDF / Word</span><span class="desktop-only">拖进卡片即可 · 图片 / PDF / Word / 文本</span></span></div>
+        <div class="photo-actions">
+          <label class="photo-btn cam-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5l-2-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span>拍照</span>
+            <input type="file" accept="image/*" capture="environment" id="file-cam" hidden />
+          </label>
+          <label class="photo-btn ghosted" id="gal-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg>
+            <span>相册 / 文件</span>
+            <input type="file" accept="image/*,.pdf,.docx,.txt,.md" multiple id="file-gal" hidden />
+          </label>
+        </div>
+        <div class="thumbs" id="thumbs-all"></div>
+        <button class="btn-accent" id="btn-transcribe-all" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>
+          <span>转写并分离题面与作文</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card input-section" id="card-review">
+    <div class="substep">
+      <span class="stepnum">2</span>
+      <div class="substep-body">
+        <div class="substep-title">核对 <span class="substep-hint">转写结果请过目后再批改；科目与题型已自动识别，可随时点选修改</span></div>
+        <div class="detect-note" id="detect-note" hidden></div>
+        <div class="field">
+          <label>题面</label>
+          <textarea id="prompt-in" rows="4" placeholder="Write an essay based on the chart below..."></textarea>
+        </div>
+        <div class="field">
+          <label>科目 · 自动识别，可修改</label>
+          <div class="seg" id="seg-track">
+            <button data-v="english-i">英语一</button>
+            <button data-v="english-ii" class="on">英语二</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>题型 · 自动识别，可修改</label>
+          <div class="seg" id="seg-task">
+            <button data-v="large" class="on">大作文 Part B</button>
+            <button data-v="small">小作文 Part A</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>作文</label>
+          <textarea id="essay-in" rows="11" placeholder="The chart shows ..." style="font-family:Georgia,serif;"></textarea>
+          <div class="count-bar" id="count-bar"></div>
+        </div>
+        <label class="confirm-row" id="confirm-row" hidden>
+          <input type="checkbox" id="confirm-check" />
+          <span>我已核对转写内容，确认无误</span>
+        </label>
+        <button class="btn-primary" id="btn-grade">开始双评</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="pipeline-card" hidden>
+    <h2><span class="dot"></span>双评流水线</h2>
+    <div class="steps" id="steps">
+      <div class="step" id="st-pre"><div class="st-icon">✓</div><div class="st-body">确定性预检<div class="st-note" id="note-pre"></div></div></div>
+      <div class="step" id="st-a"><div class="st-icon">✓</div><div class="st-body">阅卷员 A 独立盲评<div class="st-note" id="note-a"></div></div></div>
+      <div class="step" id="st-b"><div class="st-icon">✓</div><div class="st-body">阅卷员 B 独立盲评<div class="st-note" id="note-b"></div></div></div>
+      <div class="step" id="st-val"><div class="st-icon">✓</div><div class="st-body">机器校验（维度分 ∧ 档位区间 一致性）<div class="st-note" id="note-val"></div></div></div>
+      <div class="step" id="st-merge"><div class="st-icon">✓</div><div class="st-body">合并 / 仲裁<div class="st-note" id="note-merge"></div></div></div>
+    </div>
+  </section>
+
+  <div id="report-area"></div>
+
+  <footer>
+    DuoGrader · 双盲评分 + 分差仲裁 + 确定性预检 · 密钥与作文仅存本浏览器，请求直发你配置的 API<br/>
+    评分规则与开源版：<a href="https://github.com/5777-wq/duograder" target="_blank" rel="noopener">5777-wq/duograder</a>
+  </footer>
+</div>
+
+<!-- 历史抽屉 -->
+<div class="drawer-mask" id="drawer-mask"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head"><h3>批改历史</h3><button class="icon-btn" id="btn-drawer-close">关闭</button></div>
+  <div class="drawer-body" id="hist-list"></div>
+</aside>
+
+<!-- 设置弹窗 -->
+<div class="modal-mask" id="modal-mask"></div>
+<div class="modal" id="modal-settings">
+  <div class="modal-card">
+    <h3>API 设置 <span id="btn-settings-close">✕</span></h3>
+    <div class="field">
+      <label>供应商</label>
+      <div class="prov-wrap">
+        <button type="button" class="prov-btn" id="prov-btn">
+          <span id="prov-current">DeepSeek 官方</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="prov-list" id="prov-list" hidden></div>
+      </div>
+      <div class="hint">官方预设只需填 Key；地址与模型已配好（高级设置可改）。</div>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="set-key" placeholder="sk-..." autocomplete="off" />
+      <div class="hint">以<b>明文</b>存在本浏览器（无后端、不上传）。勿在共用设备使用；历史与导出不含 Key。</div>
+    </div>
+    <div class="field">
+      <label>主模型 · 批改用（点输入框下拉选择，或先点"拉取模型"）</label>
+      <input type="text" id="set-model" list="dl-models" placeholder="deepseek-chat / glm-4.6 / ..." />
+      <div class="hint">以你账号实际可用为准——拉取或诊断后不匹配会自动纠正。</div>
+    </div>
+    <div class="field">
+      <label>视觉模型 · 拍照转写用（留空则用主模型）</label>
+      <input type="text" id="set-vmodel" list="dl-vmodels" placeholder="deepseek-flash / glm-4v-flash / qwen-vl-plus ..." />
+      <div class="hint">填账号可用的多模态型号即可；批改与转写共用同一个 Key。</div>
+    </div>
+    <div class="adv-toggle" id="adv-toggle"><span class="adv-arrow">▸</span> 高级设置（Base URL）</div>
+    <div id="adv-fields" hidden>
+      <div class="field">
+        <label>Base URL</label>
+        <input type="text" id="set-base" placeholder="https://api.deepseek.com" />
+      </div>
+    </div>
+    <datalist id="dl-models"></datalist>
+    <datalist id="dl-vmodels"></datalist>
+    <div class="btn-row">
+      <button class="btn-ghost" id="btn-fetch-models">拉取模型</button>
+      <button class="btn-fill" id="btn-diag">一键诊断</button>
+      <button class="btn-ghost" id="btn-save">保存</button>
+    </div>
+    <div class="diag" id="diag-result"></div>
+    <div class="hint" id="models-result" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<!-- 邀请码登录 -->
+<div class="modal-mask" id="login-mask"></div>
+<div class="modal" id="modal-login">
+  <div class="modal-card">
+    <h3>内置算力 · 邀请码登录 <span id="btn-login-close">✕</span></h3>
+    <div class="field">
+      <label>邀请码</label>
+      <input type="password" id="login-code" placeholder="输入邀请码" autocomplete="off" />
+      <div class="hint">批改与拍照转写直接使用分享者配置的模型，无需自己的 API Key。邀请码仅保存在本浏览器。</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-fill" id="btn-login-save">登录</button>
+    </div>
+    <div class="hint" id="login-result" style="margin-top:8px;"></div>
+  </div>
+</div>
+
+<script type="module" src="ui.js"></script>
+</body>
+</html>

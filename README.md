@@ -97,6 +97,15 @@ git clone https://github.com/5777-wq/duograder.git
 
 API Key 与全部批改数据只存在**你的浏览器/手机本地**；请求直发你自己配置的供应商；本仓库与线上实例均无后端、无统计、无上传。仓库不含任何真题原文与教辅范文。
 
+## 共享算力（可选，自托管）
+
+想给同学/学生免配置直接用？附赠一个 Cloudflare 代理（[workers/invite-proxy](workers/invite-proxy) + [functions/v1](functions/v1) 两套等价实现）：
+
+- **API Key 只存 Cloudflare 加密 secret**，前端和仓库里永远只有一个邀请码占位；访客点「登录」输邀请码即可用你预设的模型
+- 无存储纯转发：代理不落任何作文数据；上游地址写死、只开放批改所需两个路径、CORS 白名单、每 IP 限速
+- 自托管三步：`wrangler deploy` → `wrangler secret put MINIMAX_API_KEY` → `wrangler secret put INVITE_CODE`（Pages Functions 版把函数放 `functions/` 后正常 `pages deploy` 即可，国内可直连同域地址）
+- 代码里的代理地址是演示实例；自己部署后，在 `app/core.js` 的 PRESETS 里改一行 baseURL 即可
+
 
 ## 致谢
 

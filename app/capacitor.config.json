@@ -1,0 +1,13 @@
+{
+  "appId": "com.duograder.app",
+  "appName": "DuoGrader",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
