@@ -424,21 +424,19 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
 }
 
 export const PRESETS = [
-  // —— 官方供应商（2026-10 实测：除注明外均可从浏览器直连） ——
-  { id: 'deepseek', name: 'DeepSeek 官方 ✓可直连', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash' },
-  { id: 'glm', name: '智谱 GLM 官方 ✓可直连', baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', vmodel: 'glm-4v-flash' },
-  { id: 'kimi', name: 'Kimi 月之暗面 官方 ✓可直连', baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', vmodel: 'moonshot-v1-8k-vision-preview' },
-  { id: 'qwen', name: '通义千问 阿里百炼 ✓可直连', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', vmodel: 'qwen-vl-plus' },
-  { id: 'ark', name: '火山方舟 豆包 ✗浏览器被拦（需桌面版/反代）', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', vmodel: 'doubao-1.5-vision-pro-32k' },
-  { id: 'openai', name: 'OpenAI 官方 ✓可直连', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o', vmodel: 'gpt-4o-mini' },
-  { id: 'anthropic', name: 'Anthropic Claude ✗浏览器被拦（需桌面版/反代）', baseURL: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', vmodel: 'claude-sonnet-4-5' },
-  { id: 'gemini', name: 'Google Gemini ✓可直连（OpenAI 兼容层）', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', vmodel: 'gemini-2.0-flash' },
-  // —— 聚合 / 托管平台 ——
-  { id: 'siliconflow', name: '硅基流动 SiliconFlow ✓可直连', baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3', vmodel: 'deepseek-ai/DeepSeek-VL2' },
-  { id: 'openrouter', name: 'OpenRouter 聚合 ✓可直连', baseURL: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', vmodel: 'google/gemini-2.0-flash-001' },
-  // —— 本地（注意：https 页面禁 http 混合内容，仅本地 http 预览页可用） ——
-  { id: 'ollama', name: 'Ollama 本地（免费，仅本地 http 页可用）', baseURL: 'http://localhost:11434/v1', model: 'qwen2.5:7b', vmodel: 'qwen2.5vl:7b' },
-  { id: 'lmstudio', name: 'LM Studio 本地（仅本地 http 页可用）', baseURL: 'http://localhost:1234/v1', model: 'local-model', vmodel: '' },
-  // —— 自定义 ——
-  { id: 'custom', name: '自定义（任意 OpenAI 兼容供应商）', baseURL: '', model: '', vmodel: '' },
+  // status: ok=浏览器可直连 / blocked=浏览器被拦 / local=仅本地 http 页（2026-10-09 实测）
+  { id: 'deepseek', name: 'DeepSeek 官方', status: 'ok', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash' },
+  { id: 'glm', name: '智谱 GLM 官方', status: 'ok', baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', vmodel: 'glm-4v-flash' },
+  { id: 'kimi', name: 'Kimi 月之暗面', status: 'ok', baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', vmodel: 'moonshot-v1-8k-vision-preview' },
+  { id: 'qwen', name: '通义千问 · 百炼', status: 'ok', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', vmodel: 'qwen-vl-plus' },
+  { id: 'ark', name: '火山方舟 · 豆包', status: 'blocked', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', vmodel: 'doubao-1.5-vision-pro-32k' },
+  { id: 'openai', name: 'OpenAI 官方', status: 'ok', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o', vmodel: 'gpt-4o-mini' },
+  { id: 'anthropic', name: 'Anthropic Claude', status: 'blocked', baseURL: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', vmodel: 'claude-sonnet-4-5' },
+  { id: 'gemini', name: 'Google Gemini', status: 'ok', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', vmodel: 'gemini-2.0-flash' },
+  { id: 'siliconflow', name: '硅基流动', status: 'ok', baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3', vmodel: 'deepseek-ai/DeepSeek-VL2' },
+  { id: 'openrouter', name: 'OpenRouter', status: 'ok', baseURL: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', vmodel: 'google/gemini-2.0-flash-001' },
+  { id: 'ollama', name: 'Ollama 本地', status: 'local', baseURL: 'http://localhost:11434/v1', model: 'qwen2.5:7b', vmodel: 'qwen2.5vl:7b' },
+  { id: 'lmstudio', name: 'LM Studio 本地', status: 'local', baseURL: 'http://localhost:1234/v1', model: 'local-model', vmodel: '' },
+  { id: 'custom', name: '自定义供应商', status: null, baseURL: '', model: '', vmodel: '' },
 ];
+export const STATUS_LABEL = { ok: '可直连', blocked: '需反代', local: '仅本地' };
