@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- DuoGrader logo: 两支相对的阅卷笔 = 双盲双评，中间接合 = 仲裁 -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e08a68"/>
+      <stop offset="1" stop-color="#c4633f"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
+  <!-- 左笔（评员 A） -->
+  <path d="M18 16 L24 16 L24 40 L21 48 L18 40 Z" fill="#faf9f5" opacity="0.95"/>
+  <!-- 右笔（评员 B） -->
+  <path d="M40 16 L46 16 L46 40 L43 48 L40 40 Z" fill="#faf9f5" opacity="0.95"/>
+  <!-- 中缝仲裁线 -->
+  <rect x="30.5" y="14" width="3" height="30" rx="1.5" fill="#faf9f5"/>
+  <circle cx="32" cy="50" r="3.2" fill="#faf9f5"/>
+</svg>
