@@ -1,6 +1,6 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
-import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType } from './core.js';
+import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages } from './core.js';
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -59,6 +59,25 @@ ok('书信关键词兜底', detectTaskType('Suppose you and Jack are going to do
 ok('图表关键词兜底→英二', detectTaskType('Write an essay based on the chart below. describe and interpret the chart.').task === 'large' && detectTaskType('Write an essay based on the chart below.').track === 'english-ii');
 ok('整页含PartA+B→按大作文并提示', (() => { const d = detectTaskType('Part A ... about 100 words ... (10 points) Part B ... about 150 words ... (15 points)'); return d.task === 'large' && d.evidence[0].includes('点改'); })());
 ok('无线索→不乱猜', detectTaskType('hello world').task === null);
+
+console.log('级别中文与反模板（内核 v1.4）');
+const zh = JSON.parse(JSON.stringify(rA));
+const SEV_ZH = { error: '错误', awkward: '欠佳', style: '润色' };
+zh.sentence_edits.forEach((e) => { e.severity = SEV_ZH[e.severity] || e.severity; });
+ok('中文级别（错误/欠佳/润色）通过校验', validateReport(zh, fx('essay-synthetic-flawed.txt')).failures.length === 0);
+ok('旧英文级别仍兼容', validateReport(rA, fx('essay-synthetic-flawed.txt')).failures.length === 0);
+const bl = JSON.parse(JSON.stringify(rA));
+bl.reusable = { patterns: ['warm and happy', 'I would appreciate it if you could ...'] };
+ok('可复用套话黑名单被打回', validateReport(bl, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('warm and happy')));
+const badSev = JSON.parse(JSON.stringify(rA));
+badSev.sentence_edits[0].severity = 'typo';
+ok('非法 severity 打回', validateReport(badSev, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('severity 非法')));
+
+console.log('转写协议（科目自动识别）');
+ok('combined 模式带 track_guess/task_guess/evidence 字段', (() => {
+  const msg = JSON.stringify(transcriptionMessages([], 'combined'));
+  return msg.includes('track_guess') && msg.includes('task_guess') && msg.includes('evidence') && msg.includes('真题');
+})());
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');
 process.exit(failed ? 1 : 0);

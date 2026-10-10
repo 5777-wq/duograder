@@ -3,7 +3,8 @@
 """DuoGrader 单评报告校验：不达标即打回重评。
 
 硬性失败（exit 1）：缺字段 / 元数据组合非法 / 档位区间错 / 维度分之和 != 总分 /
-维度分之和不在档位区间 / severity 非法 / style 级用了"错误"措辞 / top_problems 数量。
+维度分之和不在档位区间 / severity 非法 / 润色级用了"错误"措辞 /
+可复用 patterns 含模板套话（rubric 5.2 黑名单）/ top_problems 数量。
 警告（不计失败）：逐句批改的 original 与作文原文对不上（引文风格差异可能误报）。
 
 用法:
@@ -22,8 +23,19 @@ VALID_META = {
     ("english-i", "small", 10), ("english-ii", "small", 10),
     ("english-i", "large", 20), ("english-ii", "large", 15),
 }
-SEVERITIES = {"error", "awkward", "style"}
+# v1.4 起级别用中文；error/awkward/style 为历史报告兼容
+SEVERITIES = {"错误", "欠佳", "润色"}
+SEVERITY_ALIAS = {"error": "错误", "awkward": "欠佳", "style": "润色"}
+# rubric 5.2 黑名单：reusable.patterns 出现即打回
+REUSABLE_BLACKLIST = [
+    "warm and happy", "every coin has two sides", "with the development of",
+    "i will be very happy", "as far as i am concerned",
+]
 EPS = 0.01
+
+
+def norm_sev(v):
+    return SEVERITY_ALIAS.get(v, v)
 
 
 def load_json(path):
@@ -104,12 +116,21 @@ def main():
         failures.append("consistency.dimension_sum 与维度分之和不符")
 
     for i, e in enumerate(report.get("sentence_edits", [])):
-        if e.get("severity") not in SEVERITIES:
+        sev = norm_sev(e.get("severity"))
+        if sev not in SEVERITIES:
             failures.append(f"逐句批改[{i}] severity 非法: {e.get('severity')}")
-        if e.get("severity") == "style" and re.search(r"错误", re.sub(r"(并无|不是|没有|不算|不属于|不含|非)错误", "", e.get("issue", ""))):
-            failures.append(f"逐句批改[{i}] style 级不得使用'错误'措辞（否定式表述除外）")
+        if sev == "润色" and re.search(r"错误", re.sub(r"(并无|不是|没有|不算|不属于|不含|非)错误", "", e.get("issue", ""))):
+            failures.append(f"逐句批改[{i}] 润色级不得使用'错误'措辞（否定式表述除外）")
         if norm(e.get("original", "")) and norm(e["original"]) not in essay:
             warnings.append(f"逐句批改[{i}] original 与原文不符: {e['original'][:40]}...")
+
+    for i, p in enumerate(report.get("reusable", {}).get("patterns", [])):
+        low = str(p).lower()
+        hit = next((b for b in REUSABLE_BLACKLIST if b in low), None)
+        if hit:
+            failures.append(f"可复用 patterns[{i}] 含模板套话 '{hit}'，须换成本题骨架（rubric 5.2）")
+        elif "..." not in low and "___" not in low:
+            warnings.append(f"可复用 patterns[{i}] 缺少 .../___ 填空位（建议改为骨架形式）: {str(p)[:40]}")
 
     n_problems = len(report.get("top_problems", []))
     if not (2 <= n_problems <= 3):

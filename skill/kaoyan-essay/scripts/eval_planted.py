@@ -22,6 +22,14 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", str(s or "")).strip().lower()
 
 
+# v1.4 起报告级别用中文；种子清单沿用英文，比对前归一
+SEV_ALIAS = {"错误": "error", "欠佳": "awkward", "润色": "style"}
+
+
+def sev(e) -> str:
+    return SEV_ALIAS.get(e.get("severity"), e.get("severity"))
+
+
 def load_report(path):
     raw = open(path, encoding="utf-8").read().strip()
     if raw.startswith("```"):
@@ -51,10 +59,10 @@ def main():
         hit = None
         for i, e in enumerate(edits):
             if norm(e.get("original", "")).find(pat) >= 0:
-                if seed["expected"] in ("any", e.get("severity")):
+                if seed["expected"] in ("any", sev(e)):
                     hit = i
                 else:
-                    hit = ("wrong-severity", i, e.get("severity"))
+                    hit = ("wrong-severity", i, sev(e))
                 break
         if hit is None:
             missed.append(seed)
@@ -67,7 +75,7 @@ def main():
 
     fp_candidates = []
     for i, e in enumerate(edits):
-        if i in used or e.get("severity") != "error":
+        if i in used or sev(e) != "error":
             continue
         if not any(norm(s["pattern"]) in norm(e.get("original", "")) for s in seeds):
             fp_candidates.append(e.get("original", "")[:60])
@@ -80,7 +88,7 @@ def main():
     wrong = [d for d in detected if d["result"] != "ok"]
     for w in wrong:
         print(f"  [级别不符] {w['id']}：期望 {w['expected']}")
-    print(f"severity=error 的条目共 {sum(1 for e in edits if e.get('severity') == 'error')} 条；"
+    print(f"severity=error(错误) 的条目共 {sum(1 for e in edits if sev(e) == 'error')} 条；"
           f"其中 {len(fp_candidates)} 条不匹配任何种子 → 误报候选（人工复核）")
     for f_ in fp_candidates:
         print(f"  [误报候选] {f_}...")

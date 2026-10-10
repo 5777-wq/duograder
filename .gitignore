@@ -16,3 +16,4 @@ Thumbs.db
 
 # 部署暂存目录
 .pages-dist/
+__pycache__/

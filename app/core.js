@@ -163,6 +163,10 @@ export function parseModelJSON(text) {
 
 const EPS = 0.01;
 const negated = (s) => s.replace(/(并无|不是|没有|不算|不属于|不含|非)错误/g, '');
+// 内核 v1.4：级别用中文，历史英文枚举保持兼容
+const SEV_ALIAS = { '错误': 'error', '欠佳': 'awkward', '润色': 'style', error: 'error', awkward: 'awkward', style: 'style' };
+// rubric 5.2 黑名单：可复用句式里出现即打回（与 scripts/validate_report.py 同口径）
+const REUSABLE_BLACKLIST = ['warm and happy', 'every coin has two sides', 'with the development of', 'i will be very happy', 'as far as i am concerned'];
 
 export function validateReport(report, essayText) {
   const failures = [], warnings = [];
@@ -201,9 +205,17 @@ export function validateReport(report, essayText) {
   if (report.consistency?.in_band_range !== true) failures.push('consistency.in_band_range 必须为 true');
 
   (report.sentence_edits || []).forEach((e, i) => {
-    if (!['error', 'awkward', 'style'].includes(e.severity)) failures.push(`逐句批改[${i}] severity 非法: ${e.severity}`);
-    if (e.severity === 'style' && /错误/.test(negated(e.issue || ''))) failures.push(`逐句批改[${i}] style 级不得使用"错误"措辞（否定式除外）`);
+    const sev = SEV_ALIAS[e.severity];
+    if (!sev) failures.push(`逐句批改[${i}] severity 非法: ${e.severity}`);
+    if (sev === 'style' && /错误/.test(negated(e.issue || ''))) failures.push(`逐句批改[${i}] 润色级不得使用"错误"措辞（否定式除外）`);
     if (norm(e.original) && !essayNorm.includes(norm(e.original))) warnings.push(`逐句批改[${i}] original 与原文不符`);
+  });
+
+  (report.reusable?.patterns || []).forEach((p, i) => {
+    const low = String(p).toLowerCase();
+    const hit = REUSABLE_BLACKLIST.find((b) => low.includes(b));
+    if (hit) failures.push(`可复用 patterns[${i}] 含模板套话 '${hit}'，须换成本题骨架（rubric 5.2）`);
+    else if (!low.includes('...') && !low.includes('___')) warnings.push(`可复用 patterns[${i}] 建议改为带 .../___ 填空位的句式骨架`);
   });
 
   const n = (report.top_problems || []).length;
@@ -372,7 +384,7 @@ export function transcriptionMessages(imageDataUrls, kind) {
       {
         role: 'user',
         content: [
-          { type: 'text', text: '照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）"}\n注意：手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。' },
+          { type: 'text', text: '照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）", "task_guess": "large 或 small 或 unknown（按题面判断）", "track_guess": "english-i 或 english-ii 或 unknown", "evidence": "判断依据一句话；若题面与 2010-2026 历年真题吻合，写明「20XX年英语X Part A/B 真题匹配」，否则写体裁特征"}\n判别特征：大作文看体裁——图画/漫画→英语一，图表/表格→英语二；小作文约100词书信/通知，英一英二重叠，须靠真题年份匹配（年份+科目+题型+话题都吻合才算匹配，记忆不一致就以照片为准）。手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。' },
           ...imageDataUrls.map((u) => ({ type: 'image_url', image_url: { url: u } })),
         ],
       },

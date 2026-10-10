@@ -1,5 +1,6 @@
-# 考研英语写作评分规则（writing-rubric v1.3）
+# 考研英语写作评分规则（writing-rubric v1.4）
 
+> v1.4 变更（2026-10-10 真作文反馈）：① 第 5 节三级分类改用中文级别（错误/欠佳/润色）并附给考生看的释义；② 新增第 5.2 节"可复用"反模板规则——真作文报告中 reusable 出现过 warm and happy 等模板套话；③ 第 1.1 节新增科目/题型自动识别与真题匹配协议（配合 references/past-prompts-index.md）。
 > v1.3 变更：新增第 5.1 节中式直译速查表（种子错误评估发现 awkward 级中式直译被系统性漏检，见 data/kernel-eval-20261009）。
 
 本文件是 DuoGrader 评分的唯一依据。任何评分者（模型或人工）在打分前必须完整加载本规则，并按第 6 节流程执行。
@@ -22,6 +23,14 @@
 | 英语一 | 大作文 | 20 | 160–200 词 |
 | 英语二 | 小作文 | 10 | 约 100 词 |
 | 英语二 | 大作文 | 15 | 约 150 词 |
+
+### 1.1 科目与题型的自动识别（转写阶段执行，须用户确认）
+
+科目与题型允许自动判断，但判断结果必须连同**依据**一起展示给用户，用户确认前不得定稿：
+
+- **大作文**：体裁直接决定科目——图画/漫画类（描述画面+提炼寓意议论）→ 英语一；图表/表格/数据说明类 → 英语二。这是最可靠的特征。
+- **小作文**：英一英二体裁重叠（书信/通知/告示），不能只凭体裁判科目，须靠**历年真题匹配**（年份+科目+题型+话题四项吻合才算匹配，见 `references/past-prompts-index.md` 与 SKILL 第 2 步转写协议）。
+- 匹配失败时按体裁特征给"推断"并显式标注，请用户改选。自动识别只是预填，永远可以被用户覆盖。
 
 ## 2. 官方五档评分标准
 
@@ -100,36 +109,47 @@
 
 逐句批改中的每个问题必须标定严重级别。这条规则的目的：**宁可漏掉一个可疑点，不可把对的改错。**
 
-| 级别 | 定义 | 处理 |
-|---|---|---|
-| `error` | 客观语言错误：语法、拼写、搭配、大小写、标点 | 计入扣分，必须给出修改 |
-| `awkward` | 语法成立但别扭、中式直译、语义含混 | 不直接扣分；同一篇密集出现时可在语法/词汇维度微降（不超过 1 分） |
-| `style` | 更地道或更高级的替代表达 | 仅供润色参考，严禁作为扣分理由，评语中不得使用"错误"字样 |
+级别使用**中文字符串**（历史报告里的 error/awkward/style 仅作机器兼容，新报告一律用中文）：
 
-- 判定拿不准是不是 `error` 时，一律降级为 `awkward`。
+| 级别 | 给考生看的释义 | 定义 | 处理 |
+|---|---|---|---|
+| `错误` | 硬伤：确实错了，考试会扣分 | 客观语言错误：语法、拼写、搭配、大小写、标点 | 计入扣分，必须给出修改 |
+| `欠佳` | 不算错，但表达不地道，考官可能扣表达印象分 | 语法成立但别扭、中式直译、语义含混 | 不直接扣分；同一篇密集出现时可在语法/词汇维度微降（不超过 1 分） |
+| `润色` | 原句没有问题，只是可以更好 | 更地道或更高级的替代表达 | 仅供润色参考，严禁作为扣分理由，评语中不得使用"错误"字样 |
+
+- 判定拿不准是不是 `错误` 时，一律降级为 `欠佳`。
 - `original` 字段必须逐字复制考生原文，不得转写、不得顺手修正。
 - `improved_version` 只能使用考研中等偏上水平考生**下次自己能写出**的表达：禁止超纲词、禁止炫技修辞。修改版的标准是"可学习"，不是"母语者会怎么写"。
 
-### 5.1 中式直译速查表（awkward 级扫描清单，v1.3 新增）
+### 5.1 中式直译速查表（欠佳级扫描清单，v1.3 新增）
 
 语法成立但属中式直译/含混的表达，最易被漏判——**逐句扫描时必须额外对照本表**，命中即按表定级：
 
 | 中式表达 | 地道替换 | 级别 |
 |---|---|---|
-| grow up better（更好地成长） | develop more fully / make greater progress | awkward |
-| the situation of ... taking part in（…参加…的情况） | how often ... take part in / participation in | awkward |
-| learn knowledge | gain / acquire knowledge | error |
-| make our country more and more beautiful | make our country a better place | awkward |
-| I very like it | I like it very much | error |
-| Body is very important | Good health is very important | awkward |
-| with the development of society（开头套话滥用） | as society develops（点题后立即转入正题） | style |
-| more and more people（全文反复） | an increasing number of people（轮换） | style |
-| let students to do | let students do / encourage students to do | error |
-| play an important role in（一篇超过 2 次） | 轮换：be essential to / contribute to | style |
-| become more and more + adj（超过 2 次） | become increasingly + adj | style |
-| in a word（结尾） | in conclusion / to sum up | style |
+| grow up better（更好地成长） | develop more fully / make greater progress | 欠佳 |
+| the situation of ... taking part in（…参加…的情况） | how often ... take part in / participation in | 欠佳 |
+| learn knowledge | gain / acquire knowledge | 错误 |
+| make our country more and more beautiful | make our country a better place | 欠佳 |
+| I very like it | I like it very much | 错误 |
+| Body is very important | Good health is very important | 欠佳 |
+| with the development of society（开头套话滥用） | as society develops（点题后立即转入正题） | 润色 |
+| more and more people（全文反复） | an increasing number of people（轮换） | 润色 |
+| let students to do | let students do / encourage students to do | 错误 |
+| play an important role in（一篇超过 2 次） | 轮换：be essential to / contribute to | 润色 |
+| become more and more + adj（超过 2 次） | become increasingly + adj | 润色 |
+| in a word（结尾） | in conclusion / to sum up | 润色 |
 
-速查表的判定效力优先于"拿不准降级"规则：表中命中项**必须**按表定级，不得标为 style 以外的降级（表中标 error 的不得降为 awkward）。
+速查表的判定效力优先于"拿不准降级"规则：表中命中项**必须**按表定级，不得擅自升降（表中标 `错误` 的不得降为 `欠佳`，标 `润色` 的不得升为 `欠佳`）。
+
+### 5.2 可复用与反模板（reusable 输出规则，v1.4 新增）
+
+"可复用"板块的价值是让考生把本篇学到的东西搬到别的题目里，**不是给他一堆模板空话**：
+
+- `reusable.patterns` 只能输出**句式骨架**：从本篇作文（含修改版）提炼，或贴合本题场景，且必须用 `...` 或 `___` 留出可替换的填空位（如 "I would appreciate it if you could ___"），让人一眼看出什么场景能用。
+- `reusable.words` 只能输出与本题话题相关的词汇与地道搭配（如垃圾分类题的 waste sorting / littering）。
+- **禁止**：情绪碎片与客套填充（warm and happy、I will be very happy 之类）、与本题无关的万能开头结尾（every coin has two sides、with the development of... 之类）、裸单词或裸搭配混进 patterns。
+- 机器校验会拒绝黑名单套话（`scripts/validate_report.py`），命中即打回重评。
 
 ## 6. 评分流程
 

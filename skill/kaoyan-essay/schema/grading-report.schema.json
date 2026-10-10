@@ -13,8 +13,9 @@
         "exam_track": { "enum": ["english-i", "english-ii"] },
         "task": { "enum": ["small", "large"] },
         "max_score": { "enum": [10, 15, 20] },
-        "prompt_source": { "type": ["string", "null"], "description": "如 '2024 英语二 Part B'；用户未提供题面时为 null 且切题维度标记暂定" },
-        "word_count_reported": { "type": "integer", "description": "预检脚本给出的字数。评分者只引用，不得自算" }
+        "prompt_source": { "type": ["string", "null"], "description": "如 '2026 英语二 Part A（真题匹配）'；用户未提供题面时为 null 且切题维度标记暂定" },
+        "word_count_reported": { "type": "integer", "description": "预检脚本给出的字数。评分者只引用，不得自算" },
+        "grader_model": { "type": "string", "description": "可选。阅卷员使用的模型标识，供跨模型双评/长期偏差分析" }
       }
     },
     "band": {
@@ -66,8 +67,8 @@
         "properties": {
           "original": { "type": "string", "description": "逐字复制考生原句，不得转写或修正" },
           "issue_type": { "enum": ["grammar", "spelling", "collocation", "chinglish", "cohesion", "format", "punctuation", "word-choice"] },
-          "severity": { "enum": ["error", "awkward", "style"] },
-          "issue": { "type": "string", "description": "中文说明问题所在；severity=style 时不得使用'错误'措辞" },
+          "severity": { "enum": ["错误", "欠佳", "润色"], "description": "错误＝客观语言错误（计入扣分）；欠佳＝不算错但不地道；润色＝原句无错仅供参考。历史报告的 error/awkward/style 已弃用（校验脚本向后兼容）" },
+          "issue": { "type": "string", "description": "中文说明问题所在；severity=润色 时不得使用'错误'措辞" },
           "revised": { "type": "string", "description": "仅使用考研中等偏上水平可达成的表达" }
         }
       }
@@ -78,8 +79,8 @@
     "reusable": {
       "type": "object",
       "properties": {
-        "patterns": { "type": "array", "items": { "type": "string" }, "description": "本篇可复用的句式骨架" },
-        "words": { "type": "array", "items": { "type": "string" }, "description": "话题词汇与搭配" }
+        "patterns": { "type": "array", "items": { "type": "string" }, "description": "句式骨架：来自本篇或贴合本题，必须含 .../___ 填空位；禁止 warm and happy、every coin has two sides 之类套话（rubric 5.2）" },
+        "words": { "type": "array", "items": { "type": "string" }, "description": "仅本题话题相关的词汇与地道搭配" }
       }
     }
   }
