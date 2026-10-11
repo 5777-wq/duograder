@@ -5,8 +5,8 @@
 唯一真源：duograder/app/（index.html ui.js core.js style.css logo.svg icon*.png manifest.json）
 副本：
   1. duograder/.pages-dist/        —— Cloudflare Pages 部署目录（app/ 子目录 + 根跳转 + skill/）
-  2. duograder-app/www/            —— Capacitor webDir（根路径布局 + skill/）
-  3. duograder-app/android/.../assets/public/ —— APK 内置资产（保留 capacitor 运行时文件）
+  2. www/                          —— Capacitor webDir（根路径布局 + skill/）
+  3. android/.../assets/public/    —— APK 内置资产（保留 capacitor 运行时文件）
 
 用法：python scripts/sync_app.py   （在 duograder 仓库根目录执行）
 """
@@ -62,10 +62,8 @@ def sync_www(dest: Path, label: str):
 
 
 def sync_apk_assets():
-    assets = ROOT.parent / "duograder-app" / "android" / "app" / "src" / "main" / "assets" / "public"
-    if not assets.exists():
-        print("! 未找到 APK assets 目录，跳过（duograder-app 未克隆？）")
-        return
+    assets = ROOT / "android" / "app" / "src" / "main" / "assets" / "public"
+    assets.mkdir(parents=True, exist_ok=True)
     for child in assets.iterdir():
         if child.name in CAP_RUNTIME:
             continue
@@ -79,10 +77,10 @@ def main():
     if not APP.exists():
         sys.exit("找不到 app/ 真源目录")
     sync_pages_dist()
-    apk_root = ROOT.parent / "duograder-app"
-    sync_www(apk_root / "www", "duograder-app/www")
+    apk_root = ROOT
+    sync_www(apk_root / "www", "www（Capacitor webDir）")
     sync_apk_assets()
-    print("全部副本已与 app/ 对齐。记得提交 duograder-app 并触发 APK 构建。")
+    print("全部副本已与 app/ 对齐。提交后 CI（apk.yml）自动构建 APK。")
 
 
 if __name__ == "__main__":

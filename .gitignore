@@ -21,3 +21,15 @@ __pycache__/
 
 # wrangler 本地缓存（含账户信息，不入仓）
 .wrangler/
+
+# 安卓壳构建产物（CI 现场生成）
+/www/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+*.apk

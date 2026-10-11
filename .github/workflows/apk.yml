@@ -1,0 +1,50 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "android/**"
+      - "skill/kaoyan-essay/**"
+      - "scripts/sync_app.py"
+      - ".github/workflows/apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Capacitor deps
+        run: npm ci --no-audit --no-fund
+
+      # 从 app/ 源码生成 www（Capacitor webDir）与 android 资产
+      - name: Sync web assets
+        run: python3 scripts/sync_app.py
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk DuoGrader.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuoGrader-apk
+          path: DuoGrader.apk
