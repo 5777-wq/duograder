@@ -92,6 +92,7 @@ async function init() {
     });
   }
   $('btn-transcribe-all').addEventListener('click', () => transcribe());
+  bindCrop();
   $('btn-fetch-models').addEventListener('click', () => fetchModels());
   // 核对确认闸门：转写过就必须勾选确认，批改按钮才解锁
   $('confirm-check').addEventListener('change', (e) => {
@@ -698,13 +699,179 @@ function syncTranscribeBtn() {
 function renderThumbs() {
   const box = $('thumbs-all');
   box.innerHTML = state.photos.map((d, i) => `
-    <div class="thumb"><img src="${d}" alt="photo-${i + 1}"/><span class="t-del" data-i="${i}">✕</span></div>`).join('');
+    <div class="thumb"><img src="${d}" alt="photo-${i + 1}" data-crop="${i}"/><span class="t-del" data-i="${i}">✕</span></div>`).join('');
+  box.querySelectorAll('img[data-crop]').forEach((el) => el.addEventListener('click', () => openCrop(Number(el.dataset.crop))));
   box.querySelectorAll('.t-del').forEach((el) => el.addEventListener('click', (ev) => {
     ev.stopPropagation();
     state.photos.splice(Number(el.dataset.i), 1);
     renderThumbs();
   }));
   syncTranscribeBtn();
+}
+
+/* ---------- 照片裁剪：点缩略图进入；拖拽选区/四角缩放/90°旋转，输出保持原图分辨率 ---------- */
+const crop = { idx: -1, img: null, rot: 0, scale: 1, rect: null, drag: null, rotCanvas: null };
+
+function openCrop(i) {
+  if (state.busy) return;
+  crop.idx = i; crop.rot = 0; crop.drag = null; crop.img = null;
+  const img = new Image();
+  img.onload = () => {
+    crop.img = img;
+    $('modal-crop').classList.add('show');
+    $('crop-mask').classList.add('show');
+    cropFit();
+  };
+  img.src = state.photos[i];
+}
+function closeCrop() {
+  $('modal-crop').classList.remove('show');
+  $('crop-mask').classList.remove('show');
+  crop.img = null; crop.drag = null;
+}
+// 原图旋转 90°*n 后画到离屏 canvas（保持全分辨率，裁剪从它取像素）
+function cropRotated() {
+  const { img, rot } = crop;
+  const swap = rot % 180 !== 0;
+  const w = swap ? img.naturalHeight : img.naturalWidth;
+  const h = swap ? img.naturalWidth : img.naturalHeight;
+  const c = crop.rotCanvas || (crop.rotCanvas = document.createElement('canvas'));
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  return c;
+}
+function cropFit() {
+  const rc = cropRotated();
+  const canvas = $('crop-canvas');
+  // 可用宽 = 父容器内容宽（去掉 padding），max-width 已从 CSS 移除，保证显示尺寸 = 计算尺寸
+  const ps = getComputedStyle(canvas.parentElement);
+  const innerW = canvas.parentElement.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight);
+  const maxW = Math.min(innerW, 680);
+  const maxH = Math.round(window.innerHeight * 0.56);
+  crop.scale = Math.min(maxW / rc.width, maxH / rc.height);
+  const dpr = window.devicePixelRatio || 1;
+  const dispW = rc.width * crop.scale, dispH = rc.height * crop.scale;
+  canvas.width = Math.round(dispW * dpr);
+  canvas.height = Math.round(dispH * dpr);
+  canvas.style.width = Math.round(dispW) + 'px';
+  canvas.style.height = Math.round(dispH) + 'px';
+  crop.rect = { x: dispW * 0.06, y: dispH * 0.06, w: dispW * 0.88, h: dispH * 0.88 };
+  cropDraw();
+}
+function cropHandles() {
+  const r = crop.rect;
+  return [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]];
+}
+function cropDraw() {
+  const canvas = $('crop-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.width / dpr, H = canvas.height / dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const rc = cropRotated(), s = crop.scale, r = crop.rect;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(rc, 0, 0, rc.width * s, rc.height * s);
+  // 选区外压暗
+  ctx.fillStyle = 'rgba(17,17,17,0.58)';
+  ctx.fillRect(0, 0, W, r.y);
+  ctx.fillRect(0, r.y + r.h, W, H - r.y - r.h);
+  ctx.fillRect(0, r.y, r.x, r.h);
+  ctx.fillRect(r.x + r.w, r.y, W - r.x - r.w, r.h);
+  // 边框 + 三分参考线
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  for (let k = 1; k <= 2; k++) {
+    ctx.beginPath(); ctx.moveTo(r.x + (r.w * k) / 3, r.y); ctx.lineTo(r.x + (r.w * k) / 3, r.y + r.h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r.x, r.y + (r.h * k) / 3); ctx.lineTo(r.x + r.w, r.y + (r.h * k) / 3); ctx.stroke();
+  }
+  // 四角柄
+  for (const [hx, hy] of cropHandles()) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(hx - 8, hy - 8, 16, 16);
+    ctx.strokeStyle = '#111';
+    ctx.strokeRect(hx - 7.5, hy - 7.5, 15, 15);
+  }
+}
+function cropPos(e) {
+  const b = $('crop-canvas').getBoundingClientRect();
+  return { x: Math.min(Math.max(e.clientX - b.left, 0), b.width), y: Math.min(Math.max(e.clientY - b.top, 0), b.height) };
+}
+function cropHit(p) {
+  const r = crop.rect, T = 34; // 触控热区 ≥34px
+  const hs = cropHandles();
+  for (let k = 0; k < 4; k++) {
+    if (Math.abs(p.x - hs[k][0]) <= T && Math.abs(p.y - hs[k][1]) <= T) return { mode: 'resize', corner: k };
+  }
+  if (p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h) return { mode: 'move' };
+  return { mode: 'new' };
+}
+function cropNorm(a, b) {
+  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+}
+function cropClamp(r) {
+  const W = $('crop-canvas').width / (window.devicePixelRatio || 1);
+  const H = $('crop-canvas').height / (window.devicePixelRatio || 1);
+  const MIN = 60;
+  r.w = Math.max(Math.min(r.w, W), MIN);
+  r.h = Math.max(Math.min(r.h, H), MIN);
+  r.x = Math.min(Math.max(r.x, 0), W - r.w);
+  r.y = Math.min(Math.max(r.y, 0), H - r.h);
+  return r;
+}
+function bindCrop() {
+  const canvas = $('crop-canvas');
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!crop.img) return;
+    const p = cropPos(e);
+    const hit = cropHit(p);
+    crop.drag = { hit, start: p, orig: { ...crop.rect } };
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!crop.drag) return;
+    const p = cropPos(e);
+    const { hit, start, orig } = crop.drag;
+    if (hit.mode === 'move') {
+      crop.rect = cropClamp({ x: orig.x + p.x - start.x, y: orig.y + p.y - start.y, w: orig.w, h: orig.h });
+    } else if (hit.mode === 'resize') {
+      // 锚点=对角，拖动角在锚点与指针之间取矩形
+      const anchors = [[orig.x + orig.w, orig.y + orig.h], [orig.x, orig.y + orig.h], [orig.x + orig.w, orig.y], [orig.x, orig.y]];
+      const [ax, ay] = anchors[hit.corner];
+      crop.rect = cropClamp(cropNorm({ x: ax, y: ay }, p));
+    } else {
+      crop.rect = cropClamp(cropNorm(start, p));
+    }
+    cropDraw();
+  });
+  const stop = (e) => { if (crop.drag) { canvas.releasePointerCapture?.(e.pointerId); crop.drag = null; } };
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+  $('btn-crop-rotate').addEventListener('click', () => { crop.rot = (crop.rot + 90) % 360; cropFit(); });
+  $('btn-crop-reset').addEventListener('click', cropFit);
+  $('btn-crop-ok').addEventListener('click', () => {
+    const rc = cropRotated(), s = crop.scale, r = crop.rect;
+    const sx = r.x / s, sy = r.y / s, sw = r.w / s, sh = r.h / s;
+    const MAX = 2200; // 裁剪输出上限：够视觉识别，控请求体积
+    const k = Math.min(1, MAX / Math.max(sw, sh));
+    const out = document.createElement('canvas');
+    out.width = Math.round(sw * k);
+    out.height = Math.round(sh * k);
+    out.getContext('2d').drawImage(rc, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    state.photos[crop.idx] = out.toDataURL('image/jpeg', 0.9);
+    closeCrop();
+    renderThumbs();
+  });
+  $('crop-close').addEventListener('click', closeCrop);
+  $('crop-mask').addEventListener('click', closeCrop);
 }
 
 function visionSettings() {
@@ -972,3 +1139,5 @@ function renderReport(final, facts, essay) {
 }
 
 init();
+// e2e 调试钩子：只读暴露内部状态（不参与业务逻辑）
+window.__dg = { state, crop };

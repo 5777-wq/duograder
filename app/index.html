@@ -36,7 +36,7 @@
     <div class="substep">
       <span class="stepnum">1</span>
       <div class="substep-body">
-        <div class="substep-title">导入作文材料 <span class="substep-hint"><span class="mobile-only">题面与作文一起拍即可 · 支持 PDF / Word</span><span class="desktop-only">拖进卡片即可 · 图片 / PDF / Word / 文本</span></span></div>
+        <div class="substep-title">导入作文材料 <span class="substep-hint"><span class="mobile-only">题面与作文一起拍即可 · 拍多了点缩略图可裁剪 · 支持 PDF / Word</span><span class="desktop-only">拖进卡片即可 · 点缩略图可裁剪 · 图片 / PDF / Word / 文本</span></span></div>
         <div class="photo-actions">
           <label class="photo-btn cam-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5l-2-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -188,6 +188,21 @@
       <button class="btn-fill" id="btn-login-save">登录</button>
     </div>
     <div class="hint" id="login-result" style="margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- 照片裁剪 -->
+<div class="modal-mask" id="crop-mask"></div>
+<div class="modal" id="modal-crop">
+  <div class="modal-card crop-card">
+    <h3>裁剪照片 <span id="crop-close">✕</span></h3>
+    <canvas id="crop-canvas"></canvas>
+    <div class="hint" style="margin-top:8px;">拖动调整选区，四角小方块缩放；把多余的部分（如另一道题）裁出画面，转写更准。</div>
+    <div class="btn-row">
+      <button class="btn-ghost" id="btn-crop-rotate">旋转 90°</button>
+      <button class="btn-ghost" id="btn-crop-reset">重置选区</button>
+      <button class="btn-fill" id="btn-crop-ok">应用裁剪</button>
+    </div>
   </div>
 </div>
 
