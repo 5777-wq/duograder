@@ -377,6 +377,9 @@ export function httpErrorHint(status) {
 
 // —— 拍照转写（视觉模型读手写） ——
 // 合并模式：题面与手写作文可能在同一张/一组照片里，由模型分离
+// 手写修改痕迹规则：划线删除=不计入正文（收进 crossed_out）；旁注/行间插入=按插入位置并入正文
+const STRIKETHROUGH_RULES = '考生手写作文常见修改痕迹，必须正确处理：①被横线/斜线划掉的内容＝已删除，不要计入 essay 正文，逐条原样收进 crossed_out 数组；②写在划掉处上方/左方/右方的旁注、或行间插入的小字（通常有插入符号 ^ ）＝考生想替换成的修改，按其位置并入 essay 正文对应位置；③拿不准是划掉还是正常书写时，按正常书写保留（宁可保留，交给用户核对）；④划掉/旁注无法辨认的词用 [?]。';
+
 export function transcriptionMessages(imageDataUrls, kind) {
   if (kind === 'combined') {
     return [
@@ -384,7 +387,7 @@ export function transcriptionMessages(imageDataUrls, kind) {
       {
         role: 'user',
         content: [
-          { type: 'text', text: '照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）", "task_guess": "large 或 small 或 unknown（按题面判断）", "track_guess": "english-i 或 english-ii 或 unknown", "evidence": "判断依据一句话；若题面与 2010-2026 历年真题吻合，写明「20XX年英语X Part A/B 真题匹配」，否则写体裁特征"}\n判别特征：大作文看体裁——图画/漫画→英语一，图表/表格→英语二；小作文约100词书信/通知，英一英二重叠，须靠真题年份匹配（年份+科目+题型+话题都吻合才算匹配，记忆不一致就以照片为准）。手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。' },
+          { type: 'text', text: `照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）", "crossed_out": ["被划线划掉的内容，原样；没有则空数组"], "task_guess": "large 或 small 或 unknown（按题面判断）", "track_guess": "english-i 或 english-ii 或 unknown", "evidence": "判断依据一句话；若题面与 2010-2026 历年真题吻合，写明「20XX年英语X Part A/B 真题匹配」，否则写体裁特征"}\n${STRIKETHROUGH_RULES}\n判别特征：大作文看体裁——图画/漫画→英语一，图表/表格→英语二；小作文约100词书信/通知，英一英二重叠，须靠真题年份匹配（年份+科目+题型+话题都吻合才算匹配，记忆不一致就以照片为准）。手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。` },
           ...imageDataUrls.map((u) => ({ type: 'image_url', image_url: { url: u } })),
         ],
       },
@@ -392,7 +395,7 @@ export function transcriptionMessages(imageDataUrls, kind) {
   }
   const instruction = kind === 'prompt'
     ? '转写图片中的考研英语作文题面（可能包含 Directions、要求、分值，以及图表或图画的文字描述）。完整保留全部信息，中文说明照原样保留，段落间用空行。只输出转写文本本体，不要解释，不要围栏。'
-    : '转写图片中的手写英语作文。逐词转写：不要纠错、不要补全、不要改写考生写的内容（拼写错误也原样保留）；保留段落结构，段落之间用一个空行分隔；无法辨认的词用 [?] 占位；多张图片按顺序是同一篇作文的连续部分。只输出转写文本本体，不要解释，不要围栏。';
+    : `转写图片中的手写英语作文。逐词转写：不要纠错、不要补全、不要改写考生写的内容（拼写错误也原样保留）；保留段落结构，段落之间用一个空行分隔；无法辨认的词用 [?] 占位；多张图片按顺序是同一篇作文的连续部分。只输出转写文本本体，不要解释，不要围栏。\n${STRIKETHROUGH_RULES}\n（本模式只输出 essay 正文文本本体；划掉内容直接跳过。）`;
   return [
     { role: 'system', content: '你是手写照片转写助手，只输出转写结果文本。' },
     {
@@ -405,8 +408,9 @@ export function transcriptionMessages(imageDataUrls, kind) {
   ];
 }
 
-// —— API 调用（OpenAI 兼容）：60s 超时 + 429/5xx/网络错误指数退避重试 ——
-export async function callChat(settings, messages, { temperature = 0.3, signal, timeout = 60000, retries = 2, onUsage } = {}) {
+// —— API 调用（OpenAI 兼容）：默认 60s 超时 + 429/5xx/网络错误指数退避重试 ——
+// bodyExtra：附加到请求体的额外字段（如 reasoning_effort），代理对客户端显式值不覆盖
+export async function callChat(settings, messages, { temperature = 0.3, signal, timeout = 60000, retries = 2, onUsage, bodyExtra } = {}) {
   const base = String(settings.baseURL || '').replace(/\/+$/, '');
   if (!base) throw new Error('未配置 API 地址（设置里选一个预设或填 baseURL）');
   let lastErr;
@@ -422,7 +426,7 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
       const res = await fetch(base + '/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (settings.apiKey || '') },
-        body: JSON.stringify({ model: settings.model, messages, temperature, stream: false }),
+        body: JSON.stringify({ model: settings.model, messages, temperature, stream: false, ...(bodyExtra || {}) }),
         signal: ctrl.signal,
       });
       if (!res.ok) {

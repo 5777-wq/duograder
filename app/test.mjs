@@ -73,10 +73,15 @@ const badSev = JSON.parse(JSON.stringify(rA));
 badSev.sentence_edits[0].severity = 'typo';
 ok('非法 severity 打回', validateReport(badSev, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('severity 非法')));
 
-console.log('转写协议（科目自动识别）');
-ok('combined 模式带 track_guess/task_guess/evidence 字段', (() => {
+console.log('转写协议（科目自动识别 + 手写修改痕迹）');
+ok('combined 模式带 track_guess/task_guess/evidence/crossed_out 字段', (() => {
   const msg = JSON.stringify(transcriptionMessages([], 'combined'));
-  return msg.includes('track_guess') && msg.includes('task_guess') && msg.includes('evidence') && msg.includes('真题');
+  return msg.includes('track_guess') && msg.includes('task_guess') && msg.includes('evidence')
+    && msg.includes('crossed_out') && msg.includes('真题') && msg.includes('划掉');
+})());
+ok('essay 模式带划线/旁注规则', (() => {
+  const msg = JSON.stringify(transcriptionMessages([], 'essay'));
+  return msg.includes('划掉') && msg.includes('旁注') && msg.includes('保留');
 })());
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');

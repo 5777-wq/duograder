@@ -242,6 +242,14 @@ ul.problems li { margin: 7px 0; color: var(--ink-soft); font-size: 13.5px; }
 .btn-accent svg { width: 16px; height: 16px; }
 .btn-accent:active { transition: none; opacity: 0.75; }
 .btn-accent:disabled { opacity: 0.35; cursor: not-allowed; }
+/* 转写等待：白圈 spinner + 轮换提示（大模型读手写慢，须让用户知道没卡死） */
+.btn-accent .spin {
+  width: 15px; height: 15px; flex: none; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.wait-note { font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center; }
 @keyframes thumbIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .thumbs:not(:empty) { margin-bottom: 4px; }

@@ -689,6 +689,7 @@ async function toImageDataUrl(file) {
 
 function syncTranscribeBtn() {
   const btn = $('btn-transcribe-all');
+  if (state.busy) return; // 转写进行中：按钮由 transcribe() 控制（spinner + 点此取消）
   const n = state.photos.length;
   btn.disabled = n === 0;
   btn.textContent = n === 0 ? '转写并分离' : `转写并分离（${n} 张照片）`;
@@ -712,7 +713,11 @@ function visionSettings() {
 }
 
 async function transcribe() {
-  if (state.busy) return;
+  // 转写中再点 = 取消（大模型慢，必须可中止）
+  if (state.busy) {
+    if (state.tAbort) state.tAbort.abort();
+    return;
+  }
   if (!state.photos.length) { banner('先添加照片，题面与作文一起拍即可。', 'bad'); return; }
   if (!state.settings?.baseURL || !state.settings?.apiKey) { openSettings(); banner('请先在设置里配置 API（转写需要视觉模型）。', 'bad'); return; }
   // 覆盖确认：文本框已有内容且不是上次转写结果时先问一声
@@ -720,15 +725,29 @@ async function transcribe() {
     if (!confirm('转写会覆盖文本框里已有的内容，继续？')) return;
   }
   state.busy = true;
+  state.tAbort = new AbortController();
   const btn = $('btn-transcribe-all');
-  btn.disabled = true;
+  // 等待反馈：按钮加 spinner + 轮换提示（大模型读手写确实慢，让用户知道没卡死）
+  const WAIT_LINES = [
+    '正在识别照片文字…',
+    '分离题面与手写作文…',
+    '手写识别较慢，约需 0.5–2 分钟，请稍候…',
+  ];
+  let wi = 0;
+  btn.innerHTML = '<span class="spin"></span><span id="wait-label">转写中…（点此取消）</span>';
+  const waitNote = $('wait-note');
+  waitNote.hidden = false;
+  waitNote.textContent = WAIT_LINES[0];
+  const waitTimer = setInterval(() => { wi = (wi + 1) % WAIT_LINES.length; waitNote.textContent = WAIT_LINES[wi]; }, 6000);
   try {
     state.lastTranscribed = state.lastTranscribed || {};
-    btn.textContent = `转写中…（${state.photos.length} 张）`;
-    const out = await callChat(visionSettings(), transcriptionMessages(state.photos, 'combined'), { temperature: 0 });
+    const out = await callChat(visionSettings(), transcriptionMessages(state.photos, 'combined'), {
+      temperature: 0, timeout: 180000, signal: state.tAbort.signal, retries: 1,
+      bodyExtra: { reasoning_effort: 'low' }, // 转写是读图任务：低思考档，把深度推理留给批改
+    });
     const parsed = parseModelJSON(out);
     if (!parsed.ok) throw new Error('模型输出解析失败：' + parsed.error);
-    const { prompt = '', essay = '', task_guess: tg, track_guess: trg, evidence } = parsed.obj || {};
+    const { prompt = '', essay = '', task_guess: tg, track_guess: trg, evidence, crossed_out: crossed } = parsed.obj || {};
     if (!String(essay).trim()) throw new Error('没认出手写作文——照片里手写部分清楚吗？多拍一张近景再试。');
     $('prompt-in').value = String(prompt).trim();
     $('essay-in').value = String(essay).trim();
@@ -737,6 +756,14 @@ async function transcribe() {
     updateCountBar();
     // 科目/题型：优先用转写模型带依据的判断（含真题匹配），失败再按题面文本特征兜底
     if (!applyDetectResult({ task: tg, track: trg, evidence })) applyDetection(true);
+    // 划掉内容核对：模型跳过了什么，用户必须能看到
+    const cn = $('crossed-note');
+    if (Array.isArray(crossed) && crossed.length) {
+      cn.hidden = false;
+      cn.textContent = `已按划线删除忽略 ${crossed.length} 处：${crossed.map((c) => `「${String(c).slice(0, 30)}」`).join('、')}。如有误删，请直接补进作文框。`;
+    } else {
+      cn.hidden = true;
+    }
     // 核对确认闸门：新转写生效，重置确认状态
     state.transcribed = true;
     state.confirmed = false;
@@ -747,9 +774,13 @@ async function transcribe() {
       : '转写完成，未识别到印刷题面（切题维度将按暂定处理）。请核对后勾选确认。', 'info');
     $('card-review').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
-    banner('转写失败：' + e.message + (/404|model/i.test(String(e.message)) ? '（当前模型可能不支持图片输入，请在设置里填视觉模型）' : ''), 'bad');
+    if (state.tAbort.signal.aborted) banner('转写已取消。', 'info');
+    else banner('转写失败：' + e.message + (/404|model/i.test(String(e.message)) ? '（当前模型可能不支持图片输入，请在设置里填视觉模型）' : ''), 'bad');
   } finally {
+    clearInterval(waitTimer);
     state.busy = false;
+    state.tAbort = null;
+    $('wait-note').hidden = true;
     syncTranscribeBtn();
   }
 }
@@ -785,7 +816,7 @@ async function gradeOnce(label) {
     kernel: state.kernel,
   });
   for (let attempt = 0; attempt < 2; attempt++) {
-    const out = await callChat(state.settings, attempt === 0 ? messages : repairMessages(messages, state.lastBad?.[label], state.lastProblems?.[label]), { temperature: 0.3, signal: state.abort?.signal, onUsage: trackUsage });
+    const out = await callChat(state.settings, attempt === 0 ? messages : repairMessages(messages, state.lastBad?.[label], state.lastProblems?.[label]), { temperature: 0.3, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000 });
     const parsed = parseModelJSON(out);
     if (parsed.ok) {
       const v = validateReport(parsed.obj, $('essay-in').value);
@@ -853,7 +884,7 @@ async function runPipeline() {
       const out = await callChat(state.settings, arbiterMessages({
         rubric: state.rubric, essay, prompt: $('prompt-in').value.trim(), reportA: ra.report, reportB: rb.report,
         kernel: state.kernel,
-      }), { temperature: 0.2, signal: state.abort?.signal, onUsage: trackUsage });
+      }), { temperature: 0.2, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000 });
       const parsed = parseModelJSON(out);
       if (!parsed.ok) throw new Error('仲裁输出解析失败：' + parsed.error);
       final = parsed.obj;
