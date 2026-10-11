@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fduograder.pages.dev%2Fapp%2F&label=%E5%AE%98%E7%BD%91)](https://duograder.pages.dev/app/)
 
-**🌐 [在线使用 · 无需安装](https://duograder.pages.dev/app/)**　|　📱 [安卓 App](#-三种用法)　|　🤖 [Agent Skill](#-三种用法)
+**🌐 [在线使用 · 无需安装](https://duograder.pages.dev/app/)**　|　📱 [安卓 App](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)　|　🤖 [Agent Skill](#-三种用法)
 
 ![真实批改报告](docs/assets/report-preview.png)
 
@@ -42,7 +42,7 @@
 打开 [duograder.pages.dev/app](https://duograder.pages.dev/app/) → 设置里选供应商、填 API Key →「一键诊断」四项全绿 → 拍照或拖入作文 → 核对 AI 转写 → 双评。手机浏览器打开后"添加到主屏幕"即是全屏 App。
 
 **📦 安卓 App**
-下载 [Releases](https://github.com/5777-wq/duograder-app/releases) 中的 APK 安装（或自建私有仓用 Actions 构建，见 [app 说明](https://github.com/5777-wq/duograder-app)）。原生壳无跨域限制，任意供应商可直连。
+直接下载 [最新版 APK](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)（安装需允许未知来源）。原生壳无跨域限制，任意供应商可直连。
 
 **🤖 Agent Skill**
 适用于 Codex / Claude Code / ZCode 等支持 skill 的 agent：
