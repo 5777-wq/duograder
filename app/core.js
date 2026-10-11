@@ -387,7 +387,7 @@ export function transcriptionMessages(imageDataUrls, kind) {
       {
         role: 'user',
         content: [
-          { type: 'text', text: `照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）", "crossed_out": ["被划线划掉的内容，原样；没有则空数组"], "task_guess": "large 或 small 或 unknown（按题面判断）", "track_guess": "english-i 或 english-ii 或 unknown", "evidence": "判断依据一句话；若题面与 2010-2026 历年真题吻合，写明「20XX年英语X Part A/B 真题匹配」，否则写体裁特征"}\n${STRIKETHROUGH_RULES}\n判别特征：大作文看体裁——图画/漫画→英语一，图表/表格→英语二；小作文约100词书信/通知，英一英二重叠，须靠真题年份匹配（年份+科目+题型+话题都吻合才算匹配，记忆不一致就以照片为准）。手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。` },
+          { type: 'text', text: `照片里是考研英语作文的完整材料：可能包含印刷的题面（Directions、图表/图画说明）和考生手写的作文（手写部分可能在多张照片中连续）。请分离并转写为 JSON：\n{"prompt": "印刷题面全文（含图表数据说明；若照片里没有题面则输出空字符串）", "essay": "考生手写作文全文（逐词转写，不纠错不改写，保留拼写错误；段落间用一个空行分隔；无法辨认的词用 [?]；多张照片按顺序拼接）", "crossed_out": ["被划线划掉的内容，原样；没有则空数组"], "task_guess": "large 或 small 或 unknown（按题面判断）", "track_guess": "english-i 或 english-ii 或 unknown", "evidence": "判断依据一句话；若题面与 2010-2026 历年真题吻合，写明「20XX年英语X Part A/B 真题匹配」，否则写体裁特征"}\n${STRIKETHROUGH_RULES}\n判别特征：大作文看体裁——图画/漫画→英语一，图表/表格→英语二；**图画+图表混合题（如 2022 年英一）不能按体裁判科目**，以题面字数/分值为准（160-200词/20分→英语一，约150词/15分→英语二）；小作文约100词书信/通知，英一英二重叠，须靠真题年份匹配（年份+科目+题型+话题都吻合才算匹配，记忆不一致就以照片为准）。手写作文里可能引用题面的词，凡是手写体都属于 essay；印刷体/照片描述属于 prompt。只输出 JSON。` },
           ...imageDataUrls.map((u) => ({ type: 'image_url', image_url: { url: u } })),
         ],
       },

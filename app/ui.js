@@ -921,8 +921,20 @@ async function transcribe() {
     state.lastTranscribed['prompt-in'] = String(prompt).trim();
     state.lastTranscribed['essay-in'] = String(essay).trim();
     updateCountBar();
-    // 科目/题型：优先用转写模型带依据的判断（含真题匹配），失败再按题面文本特征兜底
-    if (!applyDetectResult({ task: tg, track: trg, evidence })) applyDetection(true);
+    // 科目/题型：题面文字里的字数/分值是硬信号（160-200词/20分→英一等），
+    // 优先于视觉模型的体裁猜测——混合题型（图画+图表，2022 英一）曾被体裁特征误判为英二。
+    const textDetect = detectTaskType(String(prompt).trim());
+    const visionOk = ['large', 'small'].includes(tg) && ['english-i', 'english-ii'].includes(trg);
+    if (textDetect.track && (textDetect.evidence || []).some((e) => /词|words|points|分/i.test(e))) {
+      applyDetectResult({ task: textDetect.task, track: textDetect.track, evidence: textDetect.evidence.join('；') });
+      if (visionOk && trg !== textDetect.track) {
+        const note = $('detect-note');
+        note.hidden = false;
+        note.textContent = `⚠️ 转写模型按体裁猜了${TRACKS[trg]}，但题面明示「${textDetect.evidence.join('；')}」——已按题面判定为${TRACKS[textDetect.track]}，请核对。`;
+      }
+    } else if (!applyDetectResult({ task: tg, track: trg, evidence })) {
+      applyDetection(true);
+    }
     // 划掉内容核对：模型跳过了什么，用户必须能看到
     const cn = $('crossed-note');
     if (Array.isArray(crossed) && crossed.length) {
