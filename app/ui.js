@@ -816,7 +816,8 @@ async function gradeOnce(label) {
     kernel: state.kernel,
   });
   for (let attempt = 0; attempt < 2; attempt++) {
-    const out = await callChat(state.settings, attempt === 0 ? messages : repairMessages(messages, state.lastBad?.[label], state.lastProblems?.[label]), { temperature: 0.3, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000 });
+    // high 档：max 档批改 >100s 会被 Cloudflare 代理 524 掐断（直连场景才可用 max）
+    const out = await callChat(state.settings, attempt === 0 ? messages : repairMessages(messages, state.lastBad?.[label], state.lastProblems?.[label]), { temperature: 0.3, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000, bodyExtra: { reasoning_effort: 'high' } });
     const parsed = parseModelJSON(out);
     if (parsed.ok) {
       const v = validateReport(parsed.obj, $('essay-in').value);
@@ -884,7 +885,7 @@ async function runPipeline() {
       const out = await callChat(state.settings, arbiterMessages({
         rubric: state.rubric, essay, prompt: $('prompt-in').value.trim(), reportA: ra.report, reportB: rb.report,
         kernel: state.kernel,
-      }), { temperature: 0.2, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000 });
+      }), { temperature: 0.2, signal: state.abort?.signal, onUsage: trackUsage, timeout: 150000, bodyExtra: { reasoning_effort: 'high' } });
       const parsed = parseModelJSON(out);
       if (!parsed.ok) throw new Error('仲裁输出解析失败：' + parsed.error);
       final = parsed.obj;

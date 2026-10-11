@@ -59,11 +59,11 @@ export async function onRequest({ request, env }) {
   if (request.method === 'POST' && url.pathname === '/v1/chat/completions') {
     const raw = await request.text();
     if (raw.length > MAX_BODY) return json({ error: { message: '请求过大（上限 20MB）。' } }, 413, cors);
-    // 注入最高推理强度：MiniMax 官方参数，档位最高为 "max"（客户端显式给定值优先）
+    // 注入深度推理：reasoning_effort='high'（max 会被 CF 524 掐断；客户端显式给定值优先）
     let payload;
     try { payload = JSON.parse(raw); } catch { return json({ error: { message: '请求体不是合法 JSON。' } }, 400, cors); }
     if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload.reasoning_effort === undefined) {
-      payload.reasoning_effort = 'max';
+      payload.reasoning_effort = 'high';
     }
     const resp = await fetch(UPSTREAM_BASE.replace(/\/+$/, '') + '/chat/completions', {
       method: 'POST',

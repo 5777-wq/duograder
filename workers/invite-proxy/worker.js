@@ -62,12 +62,12 @@ export default {
     if (request.method === 'POST' && url.pathname === '/v1/chat/completions') {
       const raw = await request.text();
       if (raw.length > MAX_BODY) return json({ error: { message: '请求过大（上限 20MB）。' } }, 413, cors);
-      // 注入最高推理强度：MiniMax 官方参数 reasoning_effort，档位最高为 "max"。
+      // 注入深度推理：reasoning_effort='high'。max 档批改 >100s 会被 Cloudflare 524 掐断，high 是经代理的实用上限。
       // 客户端显式给定的值优先；批改这类结构化任务吃推理深度，代理侧统一开满。
       let payload;
       try { payload = JSON.parse(raw); } catch { return json({ error: { message: '请求体不是合法 JSON。' } }, 400, cors); }
       if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload.reasoning_effort === undefined) {
-        payload.reasoning_effort = 'max';
+        payload.reasoning_effort = 'high';
       }
       const upstream = env.UPSTREAM_BASE.replace(/\/+$/, '') + '/chat/completions';
       const resp = await fetch(upstream, {
