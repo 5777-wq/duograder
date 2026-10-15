@@ -324,6 +324,15 @@ export function repairMessages(baseMessages, badOutput, problems) {
   ];
 }
 
+// 设备指纹：与服务端 IP 双重计数，抬高清 IP 刷免费额度的成本（存 localStorage，清数据才会变）
+function didHdr() {
+  try {
+    let d = localStorage.getItem('duograder_did');
+    if (!d) { const a = new Uint8Array(6); crypto.getRandomValues(a); d = 'd' + Date.now().toString(36) + [...a].map((b) => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('duograder_did', d); }
+    return d;
+  } catch { return ''; }
+}
+
 // —— API 诊断（仿主流 harness 的连接检查） ——
 // 无 key 探测：只要浏览器能"读到"任意 HTTP 状态码（包括 401），就证明跨域直连可行
 export function probeCors(baseURL, timeoutMs = 8000) {
@@ -425,7 +434,7 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
     try {
       const res = await fetch(base + '/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (settings.apiKey || '') },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (settings.apiKey || ''), ...(didHdr() ? { 'X-Device-Id': didHdr() } : {}) },
         body: JSON.stringify({ model: settings.model, messages, temperature, stream: false, ...(bodyExtra || {}) }),
         signal: ctrl.signal,
       });

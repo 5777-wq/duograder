@@ -256,8 +256,10 @@ async function refreshFreeQuota() {
   // 邀请码已登录 = 不限次，不显示免费角标
   if (state.settings?.preset === 'invite' && state.settings.apiKey) return;
   try {
+    let did = '';
+    try { did = localStorage.getItem('duograder_did') || ''; } catch {}
     const p = PRESETS.find((x) => x.id === 'invite');
-    const res = await fetch(p.baseURL + '/quota');
+    const res = await fetch(p.baseURL + '/quota', did ? { headers: { 'X-Device-Id': did } } : {});
     if (!res.ok) return;
     const j = await res.json();
     if (typeof j.remaining === 'number') paintFree(j.remaining);
