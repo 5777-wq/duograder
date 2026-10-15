@@ -7,6 +7,7 @@
 const UPSTREAM_BASE = 'https://api.minimaxi.com/v1';
 const UPSTREAM_MODEL = 'MiniMax-M3.1-Flash-Preview';
 const MAX_BODY = 20 * 1024 * 1024;
+const FREE_LIMIT = 50;
 
 function corsHeaders(request) {
   const origin = request.headers.get('Origin') || '';
@@ -38,6 +39,23 @@ function rateLimited(ip) {
   return limited;
 }
 
+function freeKey(ip) { return 'free:' + ip; }
+async function freeGet(env, ip) {
+  if (!env.FREE_KV) return null;
+  try {
+    const raw = await env.FREE_KV.get(freeKey(ip));
+    const n = raw ? parseInt(raw, 10) || 0 : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch { return 0; }
+}
+async function freeBump(env, ip) {
+  try {
+    const n = ((await freeGet(env, ip)) || 0) + 1;
+    await env.FREE_KV.put(freeKey(ip), String(n), { expirationTtl: 60 * 60 * 24 * 180 });
+    return n;
+  } catch { return null; }
+}
+
 export async function onRequest({ request, env }) {
   const cors = corsHeaders(request);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
@@ -46,17 +64,38 @@ export async function onRequest({ request, env }) {
   if (rateLimited(ip)) return json({ error: { message: '请求过于频繁，请稍后再试。' } }, 429, cors);
 
   const code = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  if (!code || code !== env.INVITE_CODE) {
+  const authed = !!code && code === env.INVITE_CODE;
+  const anonymous = !code;
+  // 带了码但不对 → 401；完全不带码 → 匿名免费额度通道（每 IP 限 FREE_LIMIT 次）
+  if (!authed && !anonymous) {
     return json({ error: { message: '邀请码无效：请点右上角「登录」输入邀请码，或在设置里使用自己的 API Key。' } }, 401, cors);
   }
 
   const url = new URL(request.url);
+
+  // 免费额度查询（只读不计数）：邀请码登录态返回 unlimited，匿名返回剩余次数
+  if (request.method === 'GET' && url.pathname === '/v1/quota') {
+    const q = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    if (q && q === env.INVITE_CODE) return json({ unlimited: true }, 200, cors);
+    if (!env.FREE_KV) return json({ error: { message: '免费额度未配置' } }, 404, cors);
+    const n = await freeGet(env, ip);
+    return json({ limit: FREE_LIMIT, used: n, remaining: Math.max(0, FREE_LIMIT - n) }, 200, cors);
+  }
 
   if (request.method === 'GET' && url.pathname === '/v1/models') {
     return json({ object: 'list', data: [{ id: UPSTREAM_MODEL, object: 'model' }] }, 200, cors);
   }
 
   if (request.method === 'POST' && url.pathname === '/v1/chat/completions') {
+    if (!authed) {
+      if (!env.MINIMAX_API_KEY || !env.FREE_KV) {
+        return json({ error: { message: '邀请码无效：请点右上角「登录」输入邀请码，或在设置里使用自己的 API Key。' } }, 401, cors);
+      }
+      const used = await freeGet(env, ip);
+      if (used >= FREE_LIMIT) {
+        return json({ error: { message: '本 IP 的 ' + FREE_LIMIT + ' 次免费批改额度已用完（180 天后重置）。可在设置里换成自己的 API Key 继续使用。' } }, 429, cors);
+      }
+    }
     const raw = await request.text();
     if (raw.length > MAX_BODY) return json({ error: { message: '请求过大（上限 20MB）。' } }, 413, cors);
     // 注入深度推理：reasoning_effort='high'（max 会被 CF 524 掐断；客户端显式给定值优先）
@@ -70,9 +109,15 @@ export async function onRequest({ request, env }) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.MINIMAX_API_KEY },
       body: JSON.stringify(payload),
     });
+    const headers = { 'Content-Type': resp.headers.get('Content-Type') || 'application/json', ...cors };
+    // 匿名成功调用才计数，并在响应头里带回剩余次数
+    if (!authed && resp.status === 200) {
+      const n2 = await freeBump(env, ip);
+      if (n2 !== null) headers['X-Free-Remaining'] = String(Math.max(0, FREE_LIMIT - n2));
+    }
     return new Response(resp.body, {
       status: resp.status,
-      headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json', ...cors },
+      headers,
     });
   }
 

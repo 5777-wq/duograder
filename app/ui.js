@@ -237,7 +237,31 @@ function loadSettings() {
     state.settings = { ...state.settings, baseURL: p.baseURL, model: p.model, vmodel: p.vmodel || '' };
     localStorage.setItem('duograder_settings_v1', JSON.stringify(state.settings));
   }
+  // 免费额度模式：新访客默认走内置算力匿名通道（不写 localStorage，首次保存设置才落盘）
+  if (!state.settings && p) {
+    state.settings = { preset: 'invite', baseURL: p.baseURL, model: p.model, vmodel: p.vmodel || '', apiKey: '' };
+  }
   if (state.settings) $('btn-settings').textContent = '设置 ●';
+}
+
+/* ---------- 免费额度角标（每 IP 50 次，内置算力） ---------- */
+function paintFree(n) {
+  const el = $('free-quota');
+  if (!el || typeof n !== 'number') return;
+  el.hidden = false;
+  el.textContent = '免费 ' + Math.max(0, n) + '/50';
+}
+window.addEventListener('dg-free', (e) => paintFree(e.detail));
+async function refreshFreeQuota() {
+  // 邀请码已登录 = 不限次，不显示免费角标
+  if (state.settings?.preset === 'invite' && state.settings.apiKey) return;
+  try {
+    const p = PRESETS.find((x) => x.id === 'invite');
+    const res = await fetch(p.baseURL + '/quota');
+    if (!res.ok) return;
+    const j = await res.json();
+    if (typeof j.remaining === 'number') paintFree(j.remaining);
+  } catch {}
 }
 function applyPreset(id) {
   const p = PRESETS.find((x) => x.id === id);
@@ -886,7 +910,7 @@ async function transcribe() {
     return;
   }
   if (!state.photos.length) { banner('先添加照片，题面与作文一起拍即可。', 'bad'); return; }
-  if (!state.settings?.baseURL || !state.settings?.apiKey) { openSettings(); banner('请先在设置里配置 API（转写需要视觉模型）。', 'bad'); return; }
+  if (!state.settings?.baseURL || (!state.settings?.apiKey && state.settings?.preset !== 'invite')) { openSettings(); banner('请先在设置里配置 API（转写需要视觉模型）。', 'bad'); return; }
   // 覆盖确认：文本框已有内容且不是上次转写结果时先问一声
   if (['prompt-in', 'essay-in'].some((id) => $(id).value.trim() && $(id).value !== state.lastTranscribed?.[id])) {
     if (!confirm('转写会覆盖文本框里已有的内容，继续？')) return;
@@ -1017,7 +1041,7 @@ async function runPipeline() {
   if (state.transcribed && !state.confirmed) { state.busy = false; banner('转写结果需先核对确认后再批改。', 'bad'); return; }
   if (!essay.trim()) { state.busy = false; banner('先粘贴或输入你的作文（或拍照转写）。', 'bad'); return; }
   if (!state.rubric) { state.busy = false; banner('评分规则未加载。', 'bad'); return; }
-  if (!state.settings?.baseURL || !state.settings?.apiKey) { state.busy = false; openSettings(); banner('请先在设置里配置 API。', 'bad'); return; }
+  if (!state.settings?.baseURL || (!state.settings?.apiKey && state.settings?.preset !== 'invite')) { state.busy = false; openSettings(); banner('请先在设置里配置 API。', 'bad'); return; }
 
   state.abort = new AbortController();
   state.runUsage = { calls: 0, tokens: 0 };
@@ -1151,5 +1175,7 @@ function renderReport(final, facts, essay) {
 }
 
 init();
+// 免费额度角标：页面载入即向 /v1/quota 查询本 IP 剩余次数（邀请码登录态则不显示）
+refreshFreeQuota();
 // e2e 调试钩子：只读暴露内部状态（不参与业务逻辑）
 window.__dg = { state, crop };

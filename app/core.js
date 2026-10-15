@@ -429,6 +429,11 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
         body: JSON.stringify({ model: settings.model, messages, temperature, stream: false, ...(bodyExtra || {}) }),
         signal: ctrl.signal,
       });
+      // 免费额度：服务端在匿名响应头里带回剩余次数，广播给 UI 角标
+      try {
+        const fr = res.headers.get('X-Free-Remaining');
+        if (fr !== null) window.dispatchEvent(new CustomEvent('dg-free', { detail: Number(fr) }));
+      } catch {}
       if (!res.ok) {
         const t = await res.text().catch(() => '');
         const err = new Error(`API 返回 HTTP ${res.status}: ${t.slice(0, 200)}`);

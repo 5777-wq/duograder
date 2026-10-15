@@ -22,8 +22,8 @@
       <img class="mark" src="logo.svg" alt="DuoGrader" />
       <h1>DuoGrader</h1>
       <small class="hide-sm">双评阅卷官 · 考研英语作文</small>
-      <a class="icon-btn" href="https://kaoyan-sheets.pages.dev/" style="text-decoration:none">考研总站</a>
     </div>
+    <span class="icon-btn" id="free-quota" hidden title="本 IP 免费批改额度（内置算力提供）"></span>
     <button class="icon-btn" id="btn-login">登录</button>
     <button class="icon-btn" id="btn-history">历史</button>
     <button class="icon-btn" id="btn-settings">设置</button>
@@ -31,7 +31,7 @@
 </header>
 
 <div class="wrap">
-  <div id="banner-area"></div>
+  <div id="banner-area"><div class="banner info">🎁 免登录可用：每个 IP 赠 50 次免费批改（内置算力提供）；点右上角「登录」输入邀请码则不限次。</div></div>
 
   <section class="card main-card input-section">
     <div class="substep">
@@ -184,7 +184,7 @@
     <div class="field">
       <label>邀请码</label>
       <input type="password" id="login-code" placeholder="输入邀请码" autocomplete="off" />
-      <div class="hint">批改与拍照转写直接使用分享者配置的模型，无需自己的 API Key。邀请码仅保存在本浏览器。</div>
+      <div class="hint">批改与拍照转写直接使用分享者配置的模型，无需自己的 API Key。邀请码仅保存在本浏览器。<b>没有邀请码？不用登录——每个 IP 直接赠 50 次免费批改（内置算力）。</b></div>
     </div>
     <div class="btn-row">
       <button class="btn-fill" id="btn-login-save">登录</button>
