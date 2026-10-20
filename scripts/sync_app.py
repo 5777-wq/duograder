@@ -74,12 +74,17 @@ def check_proxy_copies() -> list:
 
 
 def check_desktop_skill() -> list:
-    """app/skill/ 与真源 skill/ 的漂移清单。"""
+    """app/skill/ 与真源 skill/ 的漂移清单。
+
+    app/skill/ 是构建期副本（已 gitignore），全新克隆的仓库里本来就没有——
+    不存在时无从检查、不算漂移；一旦存在就必须与真源一致。
+    桌面壳的 CI 会先跑一次 sync 生成它，所以打包时永远是新的。
+    """
     src = ROOT / "skill"
     if not src.exists():
         return ["真源缺失: skill/"]
     if not DESKTOP_SKILL.exists():
-        return ["app/skill/ 缺失（桌面壳打包需要）"]
+        return []
     drift = []
 
     def walk(c):

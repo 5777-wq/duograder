@@ -1,15 +1,12 @@
 name: Desktop · Windows 便携版
 
+# 不用 paths 过滤：paths 与 tags 同时存在时，标签推送的路径过滤判定不可靠，
+# 会导致 v* 标签推上去却根本不触发这条流水线。这里用明确的分支+标签语义。
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
-    paths:
-      - "app/**"
-      - "skill/kaoyan-essay/**"
-      - "scripts/sync_app.py"
-      - ".github/workflows/desktop.yml"
+    branches: [main]
+    tags: ["v*"]
 
 jobs:
   build:
