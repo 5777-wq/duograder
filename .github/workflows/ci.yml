@@ -34,6 +34,9 @@ jobs:
       - name: 副本无漂移（代理内核与 app/ 副本必须与真源一致）
         run: python scripts/sync_app.py --check
 
+      - name: README 自检（路径 / 锚点 / 断言数必须与仓库一致）
+        run: node scripts/check_readme.mjs
+
       - name: 评分脚本冒烟（预检 / 报告校验 / 评估器语法）
         run: |
           cd skill/kaoyan-essay

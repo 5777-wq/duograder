@@ -163,7 +163,7 @@ async function init() {
     state.kernel = null; // core.js 内置提示词兜底
     banner(navigator.onLine === false
       ? '当前离线：应用壳和历史记录仍可查看，但评分规则要联网才能加载，批改也需要联网。'
-      : '评分规则加载失败：请从仓库根目录启动本地服务器（python -m http.server 8650），再访问 /app/', 'bad');
+      : '评分规则加载失败：请从仓库根目录启动本地服务器（python -m http.server 8731），再访问 /app/', 'bad');
   }
 }
 

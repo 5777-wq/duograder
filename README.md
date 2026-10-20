@@ -13,13 +13,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Website](https://img.shields.io/website?url=https%3A%2F%2Fduograder.pages.dev%2Fapp%2F&label=%E5%AE%98%E7%BD%91)](https://duograder.pages.dev/app/)
 
-**🌐 [在线使用 · 无需安装](https://duograder.pages.dev/app/)**　|　📱 [安卓 App](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)　|　🤖 [Agent Skill](#-agent-skill)
+**🌐 [在线使用 · 无需安装](https://duograder.pages.dev/app/)**　|　📦 [安卓 App](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)　|　🤖 [Agent Skill](#-agent-skill)
 
 ![真实批改报告](docs/assets/report-preview.png)
 
 *一次真实批改的终裁报告：双评过程、维度拆解、三级逐句批改、可执行训练建议*
 
 </div>
+
+---
+
+## 目录
+
+[为什么是「双评」](#为什么是双评) · [五种用法](#五种用法) · [API 设置怎么填](#api-设置怎么填新手向) · [Agent Skill](#-agent-skill) · [工作原理](#工作原理) · [核心资产](#核心资产) · [架构与工程约定](#架构与工程约定) · [验证](#验证) · [开发与部署](#开发与部署) · [共享算力](#共享算力可选自托管) · [隐私](#隐私) · [已知局限](#已知局限) · [接下来可以做的](#接下来可以做的)
 
 ---
 
@@ -36,6 +42,8 @@
 
 效果有数：同一篇作文 3 轮双评**档位零波动**；12 颗预植错误的句级查全率 **100%**、误报 **0**；35 处逐句批改人工审计**把对的改错 = 0**。全部实验记录公开在 [`docs/validation/`](docs/validation/)，失败照报。
 
+---
+
 ## 五种用法
 
 **🌐 网页 / 手机（推荐，零安装）**
@@ -45,7 +53,7 @@
 在手机浏览器打开上面的链接 →「添加到主屏幕」。独立图标、独立窗口、无地址栏，**断网也能打开**（应用壳与历史记录本地可看，批改当然要联网）。已带 service worker，离线降级有明确提示。
 
 **📦 安卓 App**
-直接下载 [最新版 APK](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)（安装需允许未知来源）。原生壳为 Capacitor，源码在本仓 `android/`；推送 `app/` 或 `android/` 变更后 CI（apk.yml）自动构建，也可 GitHub 页面手动触发。无跨域限制，任意供应商可直连。
+直接下载 [最新版 APK](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)（安装需允许未知来源）。原生壳为 Capacitor，源码在本仓 `android/`；推送 `app/` 或 `android/` 变更后 CI（apk.yml）自动构建。无跨域限制，任意供应商可直连。
 
 **🖥️ 桌面壳（Electron）**
 ```bash
@@ -58,6 +66,8 @@ cd app && npm ci && npm start
 **🤖 [Agent Skill](#-agent-skill)**
 
 > **草稿兜底**：一次批改要跑 2-3 分钟。手机锁屏、切后台、浏览器回收标签页都可能让页面重载，作文在 DOM 里，重载即消失——所以输入的作文与题面会**自动存一份本地草稿**，下次打开自动恢复；批改成功后草稿自动清除。
+
+---
 
 ## API 设置怎么填（新手向）
 
@@ -80,6 +90,8 @@ cd app && npm ci && npm start
 
 > 不知道选哪家？**DeepSeek** 最便宜且国内直连，适合第一次用；**OpenRouter** 一把 Key 调几十家模型（有免费模型可白嫖）；**Ollama / LM Studio** 完全本地、作文不出电脑；**火山方舟 / Anthropic** 质量好但浏览器直连被拦，得配桌面壳。
 
+---
+
 ## 🤖 Agent Skill
 
 适用于 Codex / Claude Code / ZCode 等支持 skill 的 agent：
@@ -95,6 +107,8 @@ git clone https://github.com/5777-wq/duograder.git
 > ⚠️ **一个诚实的限制**：双盲的全部价值在于两位阅卷员互不可见。SKILL.md 第 4 步靠"并行派出两个独立 subagent"实现这一点——需要宿主支持 subagent。宿主不支持时按 SKILL.md 的降级条款由单上下文做两轮自评，**独立性弱于标准流程**，报告会明确标注。把"双盲执行"下沉到宿主之外（例如做成 MCP 工具，由服务端发两次互不可见的请求）是彻底解法，属下一步工作。
 
 > 💰 **成本**：一次完整批改 = 3 次模型调用（双评 + 可能的仲裁）。按 DeepSeek / GLM 计价约一两分钱，一个备考季花不了一顿早饭。
+
+---
 
 ## 工作原理
 
@@ -116,6 +130,7 @@ git clone https://github.com/5777-wq/duograder.git
 报告头部的**双评汇聚尺**把这个过程画出来：两位阅卷员的初评与终裁分落在同一条 0..满分 刻度上——同档时两个刻点垂直对齐（均值合并），差一档时刻点分离、终裁精确落在被采信的一方。不用读说明文字，一眼就知道这一分是怎么来的。
 
 **同档合并由脚本执行，档位之争才交给仲裁员**——这条边界必须严守：仲裁协议是"差一档二选一"，若把"同档但维度口径对不齐"也丢给仲裁员，等于整份挑一份，把确定性均值合并的稳定性丢掉了。分流规则写在 `scripts/average_reports.py` 的退出码里：
+
 | 退出码 | 含义 | 下一步 |
 |---|---|---|
 | 0 | 合并成功 | 直接渲染终裁报告 |
@@ -124,18 +139,72 @@ git clone https://github.com/5777-wq/duograder.git
 
 网页端走的是同一套规则（`app/core.js` 的 `mergeSameBand`），两条路径的结论由 CI 断言强制一致。
 
+---
+
 ## 核心资产
+
+### 内核（评分这件事本身）
 
 | 位置 | 是什么 |
 |---|---|
+| [`skill/kaoyan-essay/SKILL.md`](skill/kaoyan-essay/SKILL.md) | 阅卷流程编排：识别 → 转写确认 → 预检 → 双盲 → 合并/仲裁 → 渲染 |
 | [`skill/kaoyan-essay/rubrics/writing-rubric.md`](skill/kaoyan-essay/rubrics/writing-rubric.md) | 官方五档评分规则转写（档位描述是仲裁时的引用依据） |
 | [`skill/kaoyan-essay/schema/grading-report.schema.json`](skill/kaoyan-essay/schema/grading-report.schema.json) | 机器可校验的输出契约 |
 | [`skill/kaoyan-essay/prompts/`](skill/kaoyan-essay/prompts/) | 版本化提示词（阅卷员 / 仲裁员） |
+| [`skill/kaoyan-essay/references/past-prompts-index.md`](skill/kaoyan-essay/references/past-prompts-index.md) | 历年真题索引（用于题面比对定科目） |
 | [`skill/kaoyan-essay/scripts/`](skill/kaoyan-essay/scripts/) | 确定性脚本：预检 / 报告校验 / 同档合并 / 种子评估 |
-| [`app/core.js`](app/core.js) | 同一套内核的浏览器实现（ESM，Node 也能加载） |
-| [`proxy/proxy-core.js`](proxy/proxy-core.js) | 共享算力代理内核（两套部署入口共用） |
+| [`skill/kaoyan-essay/tests/fixtures/`](skill/kaoyan-essay/tests/fixtures/) | 测试用作文与题面样本 |
 
 改任何一处 → 跑 [种子错误评估](skill/kaoyan-essay/scripts/eval_planted.py) → 查全率/误报量化对比——内核迭代有数可依。
+
+### 应用层
+
+| 位置 | 是什么 |
+|---|---|
+| [`app/core.js`](app/core.js) | 同一套内核的浏览器实现（纯函数，ESM，Node 也能加载） |
+| [`app/ui.js`](app/ui.js) | 编排层：预检 → 双盲 → 校验 → 合并/仲裁 → 渲染 → 历史归档 |
+| [`app/style.css`](app/style.css) | 瑞士国际主义视觉系统（网格 / 无衬线 / 单强调色 / 圆角 0） |
+| [`app/sw.js`](app/sw.js) | Service Worker：网络优先 + 离线回落，把网页变成可安装的 App 壳 |
+| [`app/electron-main.cjs`](app/electron-main.cjs) + [`app/static-server.cjs`](app/static-server.cjs) | 桌面壳：内置静态服务器（白名单 + 路径分量守卫） |
+| [`app/test.mjs`](app/test.mjs) / [`app/parity.mjs`](app/parity.mjs) / [`app/static-server.test.mjs`](app/static-server.test.mjs) | 应用层回归与跨实现一致性断言 |
+
+### 共享算力层
+
+| 位置 | 是什么 |
+|---|---|
+| [`proxy/proxy-core.js`](proxy/proxy-core.js) | 代理内核真源：两套部署入口共用（配额 / 白名单 / CORS / 限速） |
+| [`functions/v1/`](functions/v1/) | Pages Functions 入口（主路径，与网页同域，国内可直连） |
+| [`workers/invite-proxy/`](workers/invite-proxy/) | Cloudflare Worker 入口（备用路径，海外 / 自托管） |
+| [`scripts/sync_app.py`](scripts/sync_app.py) | 单一真源同步：app/ → 三份副本、proxy/ → 两份副本，兼漂移检查 |
+
+---
+
+## 架构与工程约定
+
+这一节写的是"改动时必须遵守的规矩"，也是这个仓库最容易被人改坏的地方。
+
+**① 单一真源，副本由脚本生成**
+`app/` 是前端的唯一真源，`proxy/proxy-core.js` 是代理的唯一真源。所有副本（`.pages-dist/`、`www/`、APK 资产、`functions/v1/_proxy-core.js`、`workers/invite-proxy/_proxy-core.js`、`app/skill/`）都由 `scripts/sync_app.py` 生成，**不要手工改副本**。CI 用 `python scripts/sync_app.py --check` 断言无漂移。
+
+**② 同一套内核，两种实现，必须同口径**
+`app/core.js`（JS）与 `skill/kaoyan-essay/scripts/`（Python）是同一套规则的两份实现。`app/parity.mjs` 会在 CI 里断言：预检事实清单逐字段一致、报告校验的失败项数一致、同档合并的终裁分与退出语义一致。历史上它们悄悄漂移过三处，导致同一份报告在网页端通过、在 Skill 端被打回——**现在这类漂移会直接让 CI 变红**。
+
+**③ 退出码就是协议**
+`average_reports.py` 的退出码（0 合并 / 2 仲裁 / 3 打回重评）是 Web 端与 Skill 端共用的分流规则。改它要同时改 `app/core.js` 的 `mergeSameBand` 与 `app/ui.js` 的分流分支。
+
+**④ 动画安全铁律**
+"出现型"关键帧（`rise` / `numberIn` / `popIn` / `bannerIn` / `thumbIn` / `drMark`）**只动 transform，绝不从 `opacity: 0` 起步**；入场动画统一挂 `.anim-ok` 开关（JS 双 rAF 后才启用）。原因：窗口被遮挡或标签页在后台时动画时间线会冻结，带 `fill-mode: both` 的入场动画会把内容永远卡在透明——**白屏比没有淡入严重得多**。现在时钟冻结时内容最多差 6px，永远可见。
+
+**⑤ 路径安全按分量判断**
+桌面壳的静态服务器只暴露白名单子树，守卫用 `path.relative` 按路径分量判断（不用 `startsWith` 字符串前缀——那会被同前缀兄弟目录绕过），并校验 Host 头防 DNS rebinding。`app/static-server.test.mjs` 覆盖了这些。
+
+**⑥ 共享算力的安全默认值**
+上游地址写死、客户端无法指定目标；不转发客户端原始头，逐个重建；模型白名单 + `max_tokens` 封顶（限制单次成本）；配额先扣后调、上游失败退额；CORS 白名单只放行本应用来源。
+
+**⑦ 失败必须让用户看见**
+初始化失败会直接在页头横幅报出来，不留一个"所有按钮都没反应"的死页面；诊断的每一项失败都带"怎么办"。
+
+---
 
 ## 验证
 
@@ -158,9 +227,56 @@ git clone https://github.com/5777-wq/duograder.git
 | `node proxy/proxy-core.test.mjs` | 28 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、IPv6 归并、限速表不无界增长 |
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
 | `node app/static-server.test.mjs` | 27 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding、开发态/打包态白名单各放该放的 |
-| `python scripts/sync_app.py --check` | — | 副本与真源无漂移（代理内核 + 桌面壳的 `app/skill/`） |
+| `python scripts/sync_app.py --check` | 1 项检查 | 副本与真源无漂移（代理内核 + 桌面壳的 `app/skill/`） |
 
-> 「同口径」不是口号，是 CI 里可执行的断言。历史上 JS 与 Python 曾悄悄漂移三处（维度比较、`consistency.dimension_sum`、必填字段），导致同一份报告在网页端通过、在 Skill 端被打回——现在这类漂移会直接让 CI 变红。
+> 「同口径」不是口号，是 CI 里可执行的断言。
+
+---
+
+## 开发与部署
+
+### 本地开发
+
+```bash
+# 从仓库根起服务（评分规则用 ../skill/… 相对路径加载，必须从根起）
+python -m http.server 8731
+# 打开 http://127.0.0.1:8731/app/
+```
+
+桌面壳开发模式：`cd app && npm ci && npm start`。
+
+### 常用命令
+
+```bash
+python scripts/sync_app.py            # 同步所有副本（改完 app/ 或 proxy/ 后跑）
+python scripts/sync_app.py --check    # 只校验有无漂移（CI 用这个）
+node app/test.mjs                     # 应用层回归
+node proxy/proxy-core.test.mjs         # 代理内核回归
+node app/parity.mjs                   # JS / Python 跨实现一致性
+node app/static-server.test.mjs       # 桌面壳静态服务器回归
+cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task large <作文.txt>
+```
+
+### 三条 CI 流水线
+
+| 流水线 | 触发 | 产出 |
+|---|---|---|
+| `ci.yml` | 每次 push / PR | 150 项断言 + 副本漂移检查 + 评分脚本冒烟 |
+| `apk.yml` | `app/` `android/` `skill/` 变更 | 安卓 APK（artifact） |
+| `desktop.yml` | push 到 main / 打 `v*` 标签 | Windows 便携版 exe；标签推送时挂到 Release |
+
+### 部署到 Pages
+
+```bash
+python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
+wrangler pages secret put MINIMAX_API_KEY
+wrangler pages secret put INVITE_CODE
+wrangler pages deploy
+```
+
+> **为什么输出目录是 `.pages-dist` 而不是仓库根**：仓库根里还有 `data/`（你的批改记录）、`node_modules/`、`android/`。整根发布会把它们一并暴露到公网，所以 `wrangler.toml` 的 `pages_build_output_dir` 指向 `.pages-dist`。
+
+---
 
 ## 共享算力（可选，自托管）
 
@@ -178,7 +294,7 @@ git clone https://github.com/5777-wq/duograder.git
 | **邀请码** | 点右上角「登录」输入邀请码 | 不限次 |
 | **匿名免费** | 什么都不填，直接用 | 每 IP + 设备指纹共 50 次（180 天） |
 
-匿名免费额度需要额外配一个 KV 计数绑定（`FREE_KV`），没配时只有邀请码模式可用。
+匿名免费额度需要 KV 计数绑定（`FREE_KV`）。本仓的 `wrangler.toml` 里已绑好；自建部署时 `wrangler kv namespace create FREE_KV` 后把返回的 id 填进 `[[kv_namespaces]]`。**没绑时只有邀请码模式可用。**
 
 ### 安全设计
 
@@ -191,20 +307,9 @@ git clone https://github.com/5777-wq/duograder.git
 - **CORS 白名单**只放行本应用来源（`ALLOWED_ORIGINS` 可配，支持 `*.example.com` 通配，按域分量匹配）
 - **不落作文数据**：代理纯转发，只有计数进 KV
 
-### 自托管四步
-
-```bash
-python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
-wrangler pages secret put MINIMAX_API_KEY
-wrangler pages secret put INVITE_CODE
-wrangler pages deploy
-```
-
-> **为什么输出目录是 `.pages-dist` 而不是仓库根**：仓库根里还有 `data/`（你的批改记录）、`node_modules/`、`android/`。整根发布会把它们一并暴露到公网，所以 `wrangler.toml` 的 `pages_build_output_dir` 指向 `.pages-dist`。
-
-> **匿名免费额度**需要 KV 计数绑定。本仓的 `wrangler.toml` 里已绑好 `FREE_KV`；自建部署时改成你自己的：`wrangler kv namespace create FREE_KV` 后把返回的 id 填进 `[[kv_namespaces]]`。没绑时只有邀请码模式可用。
-
 代码里的代理地址是演示实例；自己部署后，在 `app/core.js` 的 `PRESETS` 里改一行 `baseURL` 即可。
+
+---
 
 ## 隐私
 
@@ -220,6 +325,8 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 
 > 仓库与线上实例**有**后端（就是上面这个转发代理）。它只做转发与计数，不落作文、不做统计上报、不回传任何数据。
 
+---
+
 ## 已知局限
 
 如实说，不藏着：
@@ -234,6 +341,8 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 - **PWA 离线只覆盖应用壳**：离线能打开界面、看本地历史，但评分规则（`/skill/…`）不在 service worker 的作用域内，批改必须联网。
 - **草稿只存文本**：转写出来的照片是 base64，塞不进 localStorage，所以页面被重载后要重新拍照——但已转写出的文字会恢复。
 
+---
+
 ## 接下来可以做的
 
 按「对考研学生的实际价值」排序，不含插件适配：
@@ -243,6 +352,8 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 3. **批量批改**——一次传多篇（比如整个考研班的作文）排队跑，复用同一套双评内核，边际成本几乎为零。
 4. **阶段结果持久化**——现在草稿只存输入。双评跑到一半网络断了，A 的报告得重跑；把每阶段的报告也落盘，断点续跑能省一次钱。
 5. **人工锚点校准**——把 rubric 的绝对档位对上人工专家分（锚点样文 / pairwise 排序），解决"准欠校准"这条。
+
+---
 
 ## 致谢
 
