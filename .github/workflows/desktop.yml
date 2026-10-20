@@ -37,7 +37,8 @@ jobs:
       - name: 重命名产物
         shell: pwsh
         run: |
-          $exe = Get-ChildItem "dist/*.exe" | Select-Object -First 1
+          # 注意：这一步没有 working-directory，跑在仓库根，产物在 app/dist/
+          $exe = Get-ChildItem "app/dist/*.exe" | Select-Object -First 1
           if ($exe) { Rename-Item $exe.FullName "DuoGrader.exe" }
           else { Write-Error "没找到打包产物"; exit 1 }
 
