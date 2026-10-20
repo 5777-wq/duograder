@@ -545,19 +545,62 @@ export const PRESETS = [
   // status: ok=浏览器可直连 / blocked=浏览器被拦 / local=仅本地 http 页（2026-10-09 实测）
   // invite=邀请码模式：走分享者的 Pages Function 代理（api key 存服务端，前端只持邀请码）。
   // 同域 duograder.pages.dev 国内可直连；备用 Worker（workers.dev）仅作海外/自托管参考。
-  { id: 'invite', name: '邀请码 · 内置算力', status: 'ok', baseURL: 'https://duograder.pages.dev/v1', model: 'MiniMax-M3.1-Flash-Preview', vmodel: 'MiniMax-M3.1-Flash-Preview' },
-  { id: 'deepseek', name: 'DeepSeek 官方', status: 'ok', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash' },
-  { id: 'glm', name: '智谱 GLM 官方', status: 'ok', baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', vmodel: 'glm-4v-flash' },
-  { id: 'kimi', name: 'Kimi 月之暗面', status: 'ok', baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', vmodel: 'moonshot-v1-8k-vision-preview' },
-  { id: 'qwen', name: '通义千问 · 百炼', status: 'ok', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', vmodel: 'qwen-vl-plus' },
-  { id: 'ark', name: '火山方舟 · 豆包', status: 'blocked', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', vmodel: 'doubao-1.5-vision-pro-32k' },
-  { id: 'openai', name: 'OpenAI 官方', status: 'ok', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o', vmodel: 'gpt-4o-mini' },
-  { id: 'anthropic', name: 'Anthropic Claude', status: 'blocked', baseURL: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', vmodel: 'claude-sonnet-4-5' },
-  { id: 'gemini', name: 'Google Gemini', status: 'ok', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', vmodel: 'gemini-2.0-flash' },
-  { id: 'siliconflow', name: '硅基流动', status: 'ok', baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3', vmodel: 'deepseek-ai/DeepSeek-VL2' },
-  { id: 'openrouter', name: 'OpenRouter', status: 'ok', baseURL: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', vmodel: 'google/gemini-2.0-flash-001' },
-  { id: 'ollama', name: 'Ollama 本地', status: 'local', baseURL: 'http://localhost:11434/v1', model: 'qwen2.5:7b', vmodel: 'qwen2.5vl:7b' },
-  { id: 'lmstudio', name: 'LM Studio 本地', status: 'local', baseURL: 'http://localhost:1234/v1', model: 'local-model', vmodel: '' },
-  { id: 'custom', name: '自定义供应商', status: null, baseURL: '', model: '', vmodel: '' },
+  // blurb=给新手的"选哪个"（仿主流 harness 的 provider 选择器）；keyUrl=去拿 Key 的控制台。
+  { id: 'invite', name: '邀请码 · 内置算力', status: 'ok', baseURL: 'https://duograder.pages.dev/v1', model: 'MiniMax-M3.1-Flash-Preview', vmodel: 'MiniMax-M3.1-Flash-Preview',
+    blurb: '什么都不用配，每 IP 免费批改 50 次', keyUrl: '' },
+  { id: 'deepseek', name: 'DeepSeek 官方', status: 'ok', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash',
+    blurb: '最便宜，中文批改性价比高 · 新手首选', keyUrl: 'https://platform.deepseek.com/api_keys', keyRe: /^sk-[A-Za-z0-9]{32}$/ },
+  { id: 'glm', name: '智谱 GLM 官方', status: 'ok', baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', vmodel: 'glm-4v-flash',
+    blurb: '国产老牌，GLM 中文书感好', keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys', keyRe: /^[A-Za-z0-9]{16}\.[A-Za-z0-9]{16}$/ },
+  { id: 'kimi', name: 'Kimi 月之暗面', status: 'ok', baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', vmodel: 'moonshot-v1-8k-vision-preview',
+    blurb: '长上下文强，适合一次丢整篇材料', keyUrl: 'https://platform.moonshot.cn/console/api-keys', keyRe: /^sk-[A-Za-z0-9]{48}$/ },
+  { id: 'qwen', name: '通义千问 · 百炼', status: 'ok', baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus', vmodel: 'qwen-vl-plus',
+    blurb: '阿里百炼，通义系列，认字稳', keyUrl: 'https://bailian.console.aliyun.com/' },
+  { id: 'ark', name: '火山方舟 · 豆包', status: 'blocked', baseURL: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', vmodel: 'doubao-1.5-vision-pro-32k',
+    blurb: '豆包，便宜量大', keyUrl: 'https://console.volcengine.com/ark',
+    note: '浏览器直连被拦 · 需用桌面壳或本地反代' },
+  { id: 'openai', name: 'OpenAI 官方', status: 'ok', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o', vmodel: 'gpt-4o-mini',
+    blurb: 'GPT-4o，通用能力均衡', keyUrl: 'https://platform.openai.com/api-keys', keyRe: /^sk-(proj-)?[A-Za-z0-9_-]{20,}$/ },
+  { id: 'anthropic', name: 'Anthropic Claude', status: 'blocked', baseURL: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', vmodel: 'claude-sonnet-4-5',
+    blurb: 'Claude 最会改句子', keyUrl: 'https://console.anthropic.com/',
+    note: '浏览器直连被拦 · 需用桌面壳或本地反代' },
+  { id: 'gemini', name: 'Google Gemini', status: 'ok', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', vmodel: 'gemini-2.0-flash',
+    blurb: '免费额度大，Google 生态', keyUrl: 'https://aistudio.google.com/app/apikey', keyRe: /^AIza/ },
+  { id: 'siliconflow', name: '硅基流动', status: 'ok', baseURL: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3', vmodel: 'deepseek-ai/DeepSeek-VL2',
+    blurb: '一个 Key 调各家开源模型', keyUrl: 'https://cloud.siliconflow.cn/' },
+  { id: 'openrouter', name: 'OpenRouter', status: 'ok', baseURL: 'https://openrouter.ai/api/v1', model: 'deepseek/deepseek-chat', vmodel: 'google/gemini-2.0-flash-001',
+    blurb: '一个 Key 调几十家模型 · 有免费模型可白嫖', keyUrl: 'https://openrouter.ai/keys', keyRe: /^sk-or-v1-/ },
+  { id: 'ollama', name: 'Ollama 本地', status: 'local', baseURL: 'http://localhost:11434/v1', model: 'qwen2.5:7b', vmodel: 'qwen2.5vl:7b',
+    blurb: '完全本地，作文不出电脑', keyUrl: 'https://ollama.com/library', note: '需先装 Ollama · 只有电脑能连，手机打不开' },
+  { id: 'lmstudio', name: 'LM Studio 本地', status: 'local', baseURL: 'http://localhost:1234/v1', model: 'local-model', vmodel: '',
+    blurb: '完全本地，图形界面装模型', keyUrl: 'https://lmstudio.ai', note: '需先装 LM Studio · 只有电脑能连，手机打不开' },
+  { id: 'custom', name: '自定义供应商', status: null, baseURL: '', model: '', vmodel: '',
+    blurb: '自建反代 / 中转站 / 其它兼容 OpenAI 的服务', keyUrl: '' },
 ];
 export const STATUS_LABEL = { ok: '可直连', blocked: '需反代', local: '仅本地' };
+
+// Key 前缀 → 供应商（只认前缀唯一的；贴 Key 时自动切换供应商用）
+const KEY_PREFIX = [
+  { id: 'openrouter', re: /^sk-or-v1-/i },
+  { id: 'anthropic', re: /^sk-ant-/i },
+  { id: 'openai', re: /^sk-proj-/i },
+  { id: 'gemini', re: /^AIza/ },
+  { id: 'glm', re: /^[A-Za-z0-9]{16}\.[A-Za-z0-9]{16}$/ },
+  { id: 'ark', re: /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/ },
+];
+
+// 贴 Key → 猜供应商。返回 null 表示前缀不唯一（国内几家都是 sk- 开头），不乱猜。
+export function detectProviderByKey(key) {
+  const k = String(key || '').trim();
+  if (!k) return null;
+  const hit = KEY_PREFIX.find((p) => p.re.test(k));
+  return hit ? hit.id : null;
+}
+
+// Key 与所选供应商"看起来不像"？只作软提示，绝不拦（各家格式会变，猜错不该阻断可用配置）
+export function keyLooksMismatched(presetId, key) {
+  const p = PRESETS.find((x) => x.id === presetId);
+  const k = String(key || '').trim();
+  if (!p?.keyRe || !k) return null;
+  return p.keyRe.test(k) ? null : p.name;
+}

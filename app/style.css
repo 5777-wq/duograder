@@ -73,17 +73,22 @@ header.top {
 .icon-btn:hover { border-color: var(--ink); color: var(--ink); }
 
 /* ===== 区块：hairline 分隔的白色版面（无圆角、无投影） ===== */
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { transform: translateY(6px); } to { transform: none; } }
 .card {
   background: var(--surface); border: 1px solid var(--hairline);
   border-radius: 0; padding: 24px; margin-top: 20px;
 }
-/* 入场阶梯由 JS 写 --d 决定，不用 :nth-child —— 页面里插入任何兄弟节点都会让索引错位 */
-.wrap > .card, #report-area > .card {
+/* 入场动画两条铁律：
+   1) 只挂 .anim-ok —— 由 JS 在双 rAF 后加上，确认浏览器真的在推进动画时钟才启用。
+   2) "出现型"关键帧一律只动 transform，绝不从 opacity 0 起步。
+   原因：窗口被遮挡 / 后台标签页时动画时间线会冻结。若入场动画从 opacity 0 起步并带
+   fill-mode:both，内容会永远卡在透明 —— 白屏比没有淡入严重得多。
+   只做位移的话，时钟冻结最多差 6px，内容永远可见。 */
+.anim-ok .wrap > .card, .anim-ok #report-area > .card {
   animation: rise .28s var(--ease-sig) both;
   animation-delay: var(--d, 0ms);
 }
-#report-area > .card { animation-duration: .32s; }
+.anim-ok #report-area > .card { animation-duration: .32s; }
 
 .card h2 {
   font-size: 15px; font-weight: 700; margin: 0 0 16px; color: var(--ink);
@@ -134,8 +139,8 @@ header.top {
   border: 1px dashed var(--ink);
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; font-weight: 600; color: var(--ink);
-  animation: rise .2s var(--ease-out);
 }
+.anim-ok .main-card.dragging::after { animation: rise .2s var(--ease-out); }
 
 /* ===== 表单 ===== */
 .seg { display: flex; gap: 0; flex-wrap: wrap; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--hairline); border-radius: 0; padding: 0; }
@@ -202,14 +207,14 @@ textarea::placeholder { color: #a5a49c; }
 .step .st-note { font-size: 12px; color: var(--muted); }
 
 /* ===== 报告 ===== */
-@keyframes numberIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes numberIn { from { transform: translateY(6px); } to { transform: none; } }
 /* 分数区与汇聚尺之间只留一条线：汇聚尺自带 ink 上边框，分数区不再重复一条 hairline */
 .score-hero { display: flex; align-items: flex-end; gap: 24px; padding: 4px 0 14px; margin-bottom: 14px; flex-wrap: wrap; }
 .score-big {
   font-family: var(--sans); font-size: 64px; line-height: 0.95; font-weight: 700;
   color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
-  animation: numberIn .3s var(--ease-out) both;
 }
+.anim-ok .score-big { animation: numberIn .3s var(--ease-out) both; }
 .score-big small { font-size: 18px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
 .score-meta { font-size: 13px; color: var(--muted); display: grid; grid-template-columns: auto auto; gap: 2px 16px; }
 .score-meta b { color: var(--ink); font-weight: 600; }
@@ -242,10 +247,12 @@ textarea::placeholder { color: #a5a49c; }
 .dr-mark {
   position: absolute; left: calc(var(--ratio, 0) * 100%); top: 50%;
   width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--ink);
+}
+.anim-ok .dr-mark {
   animation: drMark .16s var(--ease-out) both;
   animation-delay: calc(var(--d, 0ms) + .34s);
 }
-@keyframes drMark { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+@keyframes drMark { from { transform: scale(.6); } to { transform: none; } }
 .dr-final .dr-fill { background: var(--accent); height: 2px; margin-top: -.5px; }
 .dr-final .dr-mark { background: var(--accent); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; }
 .dr-num { font-size: 13px; text-align: right; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
@@ -306,10 +313,11 @@ ul.problems li { margin: 7px 0; color: var(--ink-soft); font-size: 13.5px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .wait-note { font-size: 12.5px; color: var(--muted); margin-top: 10px; text-align: center; }
-@keyframes thumbIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes thumbIn { from { transform: translateY(4px); } to { transform: none; } }
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .thumbs:not(:empty) { margin-bottom: 4px; }
-.thumb { position: relative; width: 64px; height: 64px; border-radius: 0; overflow: hidden; border: 1px solid var(--hairline); animation: thumbIn .22s var(--ease-out); }
+.thumb { position: relative; width: 64px; height: 64px; border-radius: 0; overflow: hidden; border: 1px solid var(--hairline); }
+.anim-ok .thumb { animation: thumbIn .22s var(--ease-out); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: pointer; }
 .thumb .t-del {
   position: absolute; top: 0; right: 0; width: 20px; height: 20px; border-radius: 0;
@@ -347,11 +355,14 @@ ul.problems li { margin: 7px 0; color: var(--ink-soft); font-size: 13.5px; }
 .diag-line {
   display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; line-height: 1.5;
   background: var(--surface); border: 1px solid var(--hairline); border-radius: 0; padding: 8px 11px;
-  animation: rise .25s var(--ease-out) both;
 }
-.diag-line .d-ico { flex: none; width: 16px; text-align: center; font-weight: 700; }
-.diag-line .d-name { flex: none; width: 84px; color: var(--ink-soft); font-weight: 600; }
-.diag-line .d-detail { color: var(--muted); word-break: break-all; }
+.anim-ok .diag-line { animation: rise .25s var(--ease-out) both; }
+.diag-line .d-ico { flex: none; width: 16px; text-align: center; font-weight: 700; padding-top: 1px; }
+.diag-line .d-body { flex: 1; min-width: 0; }
+.diag-line .d-name { display: block; font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+.diag-line .d-detail { display: block; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.diag-line .d-fix { display: block; margin-top: 3px; font-size: 12px; color: var(--ink); line-height: 1.55; }
+.diag-line .d-fix b { color: var(--accent-deep); }
 .diag-line.ok { border-left: 3px solid var(--ok); }
 .diag-line.ok .d-ico, .diag-line.ok .d-name { color: var(--ok); }
 .diag-line.bad { border-left: 3px solid var(--danger); }
@@ -359,36 +370,67 @@ ul.problems li { margin: 7px 0; color: var(--ink-soft); font-size: 13.5px; }
 .diag-line.doing .d-ico { color: var(--accent); }
 
 .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.hint.ok { color: var(--ok); }
+.hint.warn { color: var(--warn); }
+
+/* ===== 设置：新手优先的 API 配置 ===== */
+/* 三条上手路径：先告诉新手"你该走哪条"，再给配置表单 */
+.start-paths { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+.path-card {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 10px 11px; border: 1px solid var(--hairline); background: var(--surface);
+  cursor: pointer; font-family: var(--sans); text-align: left;
+  transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
+}
+.path-card:hover { border-color: var(--ink); background: var(--surface-2); }
+.path-card:active { transition: none; background: var(--surface-2); }
+.path-card b { font-size: 13px; color: var(--ink); font-weight: 700; }
+/* keep-all：中文不在词中间断，只在空格/箭头处断——避免出现"试一 / 下"这种断词 */
+.path-card span { font-size: 11.5px; color: var(--muted); line-height: 1.45; word-break: keep-all; }
 
 /* ===== 自定义供应商下拉 ===== */
 .prov-wrap { position: relative; }
 .prov-btn {
-  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  width: 100%; display: flex; align-items: center; gap: 8px;
   padding: 11px 12px; border: 1px solid var(--border); border-radius: 0;
   background: var(--surface); font-size: 14px; color: var(--ink); cursor: pointer; font-family: var(--sans);
   transition: border-color .18s var(--ease-out);
 }
-.prov-btn svg { width: 15px; height: 15px; color: var(--muted); transition: transform .2s var(--ease-sig); }
+.prov-btn #prov-current { flex: 1; text-align: left; }
+.prov-btn svg { flex: none; width: 15px; height: 15px; color: var(--muted); transition: transform .2s var(--ease-sig); }
 .prov-btn:active { transition: none; color: var(--ink); }
 .prov-list {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 25;
   background: var(--surface); border: 1px solid var(--ink); border-radius: 0;
-  max-height: 248px; overflow-y: auto; padding: 0;
-  animation: rise .18s var(--ease-out);
+  max-height: 340px; overflow-y: auto; padding: 0;
 }
+.anim-ok .prov-list { animation: rise .18s var(--ease-out); }
 .prov-row {
-  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 10px 12px; border: none; border-bottom: 1px solid var(--hairline); background: transparent;
-  font-size: 13.5px; color: var(--ink); cursor: pointer; font-family: var(--sans); text-align: left;
+  width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: stretch;
+  padding: 9px 12px 10px; border: none; border-bottom: 1px solid var(--hairline); background: transparent;
+  color: var(--ink); cursor: pointer; font-family: var(--sans); text-align: left;
   transition: background .15s var(--ease-out);
 }
 .prov-row:last-child { border-bottom: none; }
 .prov-row:hover { background: var(--surface-2); }
 .prov-row.on { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+.p-main { display: flex; align-items: center; gap: 8px; }
+.p-name { font-size: 13.5px; font-weight: 500; }
+.p-blurb { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.p-note { font-size: 11px; color: var(--warn); line-height: 1.4; }
 .p-status { flex: none; font-size: 11px; padding: 1px 8px; border-radius: 0; border: 1px solid var(--hairline); }
 .p-status.ok { color: var(--ok); border-color: var(--ok); }
 .p-status.bad { color: var(--danger); border-color: var(--danger); }
 .p-status.mut { color: var(--muted); }
+
+/* Key 区：显示/隐藏 + 去控制台的入口 */
+.key-row { display: flex; gap: 8px; align-items: stretch; }
+.key-row input { flex: 1; min-width: 0; }
+.key-eye { flex: none; padding: 0 12px; }
+.key-foot { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.key-link { font-size: 12px; color: var(--accent-deep); text-decoration: underline; text-underline-offset: 2px; align-self: flex-start; }
+.key-link:hover { color: var(--accent); }
+.key-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
 /* ===== 抽屉（历史） ===== */
 .drawer-mask, .modal-mask { position: fixed; inset: 0; background: rgba(17, 17, 17, 0.32); z-index: 40; display: none; opacity: 0; transition: opacity .2s var(--ease-out); }
@@ -429,13 +471,16 @@ body.reviewing .input-section, body.reviewing #pipeline-card, body.reviewing #ba
 /* ===== 弹窗（设置） ===== */
 .modal { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; padding: 18px; }
 .modal.show { display: flex; }
-@keyframes popIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { transform: translateY(8px); } to { transform: none; } }
 .modal-card {
   background: var(--surface); border-radius: 0; width: min(460px, 100%); max-height: 88vh;
   overflow-y: auto; padding: 22px; border: 1px solid var(--ink);
-  animation: popIn .25s var(--ease-out);
 }
+.anim-ok .modal-card { animation: popIn .25s var(--ease-out); }
 .modal-card h3 { margin: 0 0 16px; font-size: 16px; font-weight: 700; display: flex; align-items: center; letter-spacing: -0.01em; }
+/* 设置弹窗更宽：供应商说明、Key 提示与"怎么办"都需要横向空间
+   （选择器写成两段，保证能盖过 .anim-ok .modal-card 的宽度） */
+.modal-card.modal-card-wide { width: min(560px, 100%); }
 .modal-card h3 span { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 14px; padding: 4px 8px; transition: color .15s var(--ease-out); }
 .modal-card h3 span:active { transition: none; color: var(--ink); }
 .btn-row { display: flex; gap: 10px; margin-top: 18px; }
@@ -454,12 +499,12 @@ body.reviewing .input-section, body.reviewing #pipeline-card, body.reviewing #ba
 .btn-fill:active { transition: none; opacity: 0.75; }
 
 /* ===== 横幅 ===== */
-@keyframes bannerIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes bannerIn { from { transform: translateY(-4px); } to { transform: none; } }
 .banner {
   background: var(--surface); border: 1px solid var(--danger); border-left-width: 3px; color: var(--danger);
   border-radius: 0; padding: 12px 16px; margin-top: 16px; font-size: 13.5px;
-  animation: bannerIn .22s var(--ease-out);
 }
+.anim-ok .banner { animation: bannerIn .22s var(--ease-out); }
 .banner.info { border-color: var(--ink); border-left-width: 3px; color: var(--ink-soft); }
 
 footer { color: var(--muted); font-size: 12px; margin-top: 40px; line-height: 1.8; border-top: 1px solid var(--hairline); padding-top: 16px; }
@@ -499,4 +544,8 @@ footer a { color: var(--ink-soft); }
   .dr-final .dr-num { font-size: 14px; }
   .dr-head { gap: 2px; }
   .dr-mech { text-align: left; }
+  /* 设置：三条路径改竖排，窄屏才放得下 */
+  .start-paths { grid-template-columns: 1fr; gap: 6px; margin-bottom: 16px; }
+  .path-card { padding: 8px 10px; }
+  .modal-card.modal-card-wide { padding: 18px; }
 }

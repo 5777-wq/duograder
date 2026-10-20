@@ -3,6 +3,7 @@ import {
   precheck, countWords, parseModelJSON, validateReport, mergeSameBand, dualRail,
   graderMessages, arbiterMessages, repairMessages, callChat, transcriptionMessages, detectTaskType,
   probeCors, fetchModelList, chatTestMessages, visionTestMessages, httpErrorHint, PRESETS, RECOMMENDED, STATUS_LABEL,
+  detectProviderByKey, keyLooksMismatched,
 } from './core.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +22,10 @@ const state = { track: 'english-ii', task: 'large', rubric: null, schema: null, 
 async function init() {
   loadSettings();
   staggerCards(document.querySelector('.wrap'), 50);
+  // 入场动画的总开关：双 rAF 确认浏览器真的在推进动画时钟后才启用。
+  // 标签页在后台打开时动画时钟会被冻结，若无脑给主体内容上 fill-mode:both 的
+  // 入场动画，内容会一直卡在 opacity 0 —— 白屏比没有淡入严重得多。
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add('anim-ok')));
   bindSeg('seg-track', 'track');
   bindSeg('seg-task', 'task');
   $('essay-in').addEventListener('input', updateCountBar);
@@ -40,22 +45,14 @@ async function init() {
   $('drawer-mask').addEventListener('click', closeDrawer);
   $('modal-mask').addEventListener('click', closeSettings);
   $('btn-settings-close').addEventListener('click', closeSettings);
-  $('btn-save').addEventListener('click', saveSettings);
-  $('btn-diag').addEventListener('click', runDiagnostics);
+  $('btn-diag').addEventListener('click', async () => {
+    // 测通了才存——新手不该在配置错误的状态下被"保存成功"误导
+    const ok = await runDiagnostics();
+    if (ok) saveSettings({ message: '✓ 测通了，设置已保存。可以开始批改了。' });
+  });
+  $('btn-save').addEventListener('click', () => saveSettings());
   // 自定义供应商下拉（原生 select 样式不可控，弃用）
-  const provBtn = $('prov-btn'), provList = $('prov-list'), provCur = $('prov-current');
-  const STATUS_CLASS = { ok: 'ok', blocked: 'bad', local: 'mut' };
-  const renderProvList = (currentId) => {
-    provList.innerHTML = PRESETS.map((p) => `
-      <button type="button" class="prov-row ${p.id === currentId ? 'on' : ''}" data-id="${p.id}">
-        <span class="p-name">${esc(p.name)}</span>
-        ${p.status ? `<span class="p-status ${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>` : ''}
-      </button>`).join('');
-  };
-  const setProv = (id) => {
-    const p = PRESETS.find((x) => x.id === id);
-    if (p) provCur.textContent = p.name;
-  };
+  const provBtn = $('prov-btn'), provList = $('prov-list');
   provBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     renderProvList(state.preset || 'deepseek');
@@ -66,15 +63,45 @@ async function init() {
     if (!row) return;
     e.stopPropagation();
     const id = row.dataset.id;
+    provList.hidden = true;
+    // 邀请码模式不在这里配 Key——直接把人送去登录框
+    if (id === 'invite') { closeSettings(); openLogin(); return; }
     state.preset = id;
     applyPreset(id);
-    setProv(id);
+    paintProvInfo(id);
     setAdvanced(id === 'custom');
     if (id === 'custom') $('set-base').focus();
-    provList.hidden = true;
   });
   document.addEventListener('click', () => { provList.hidden = true; });
   $('adv-toggle').addEventListener('click', () => setAdvanced($('adv-fields').hidden));
+  // 贴 Key → 按前缀自动认供应商（只认前缀唯一的；国内几家都是 sk- 开头就不乱猜）
+  let keyTimer = null;
+  $('set-key').addEventListener('input', () => {
+    paintKeyHint();
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(autoPickByKey, 140);
+  });
+  $('btn-eye').addEventListener('click', () => {
+    const inp = $('set-key');
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    $('btn-eye').textContent = show ? '隐藏' : '显示';
+  });
+  // 三条上手路径
+  $('start-paths').addEventListener('click', (e) => {
+    const card = e.target.closest('.path-card');
+    if (!card) return;
+    const path = card.dataset.path;
+    if (path === 'invite') { closeSettings(); openLogin(); }
+    else if (path === 'byok') { $('set-key').focus(); $('set-key').scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    else if (path === 'local') {
+      state.preset = 'ollama';
+      applyPreset('ollama');
+      paintProvInfo('ollama');
+      setAdvanced(false);
+      setKeyHint('选了 Ollama 本地模型：先在电脑上装好 Ollama 并拉一个模型（ollama pull qwen2.5:7b），Key 留空即可。手机打不开本地服务是正常的。', 'hint warn');
+    }
+  });
   $('file-cam').addEventListener('change', (e) => handleFiles(e.target.files, e.target));
   $('file-gal').addEventListener('change', (e) => handleFiles(e.target.files, e.target));
   // APK 内：input 的 capture 属性会被 WebView 退化成文件选择器，改走原生相机插件
@@ -284,6 +311,84 @@ function setAdvanced(show) {
   $('adv-toggle').querySelector('.adv-arrow').textContent = show ? '▾' : '▸';
 }
 
+/* ---------- 供应商选择器：说清"选哪个"和"去哪儿拿 Key" ---------- */
+const STATUS_CLASS = { ok: 'ok', blocked: 'bad', local: 'mut' };
+
+function renderProvList(currentId) {
+  // 邀请码不在这里：它是"登录"模式（右上角登录 / 不想折腾那条路径），不是可配置的 BYOK 供应商
+  $('prov-list').innerHTML = PRESETS.filter((p) => p.id !== 'invite').map((p) => `
+    <button type="button" class="prov-row ${p.id === currentId ? 'on' : ''}" data-id="${p.id}">
+      <span class="p-main">
+        <span class="p-name">${esc(p.name)}</span>
+        ${p.status ? `<span class="p-status ${STATUS_CLASS[p.status]}">${esc(STATUS_LABEL[p.status])}</span>` : ''}
+      </span>
+      ${p.blurb ? `<span class="p-blurb">${esc(p.blurb)}</span>` : ''}
+      ${p.note ? `<span class="p-note">⚠ ${esc(p.note)}</span>` : ''}
+    </button>`).join('');
+}
+
+// 当前供应商的说明、状态徽章、申请 Key 链接、Key 提示
+function paintProvInfo(id) {
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) return;
+  $('prov-current').textContent = p.name;
+  const st = $('prov-status');
+  if (p.status) {
+    st.hidden = false;
+    st.className = 'p-status ' + STATUS_CLASS[p.status];
+    st.textContent = STATUS_LABEL[p.status];
+  } else {
+    st.hidden = true;
+  }
+  $('prov-blurb').textContent = p.blurb || '';
+  const link = $('key-link');
+  if (p.keyUrl) {
+    link.hidden = false;
+    link.href = p.keyUrl;
+    link.textContent = '去 ' + p.name.replace(/ 官方| · 内置算力| 本地/g, '') + ' 控制台申请 Key →';
+  } else {
+    link.hidden = true;
+  }
+  paintKeyHint();
+}
+
+// Key 提示：格式与所选供应商对不上时给软提示（绝不拦——猜错不该阻断可用配置）
+function setKeyHint(text, cls = 'hint') {
+  const el = $('key-hint');
+  if (!el) return;
+  el.textContent = text;
+  el.className = cls;
+}
+function paintKeyHint(note) {
+  const key = $('set-key').value.trim();
+  const p = PRESETS.find((x) => x.id === state.preset);
+  if (note) { setKeyHint(note, 'hint ok'); return; }
+  if (!key) {
+    setKeyHint(p?.status === 'local'
+      ? '本地模型一般不需要 Key（留空即可）'
+      : '粘贴后会自动填好地址与模型，再点「试一下」验证');
+    return;
+  }
+  const bad = keyLooksMismatched(state.preset, key);
+  if (bad) {
+    setKeyHint(`⚠ 这个 Key 看起来不像 ${bad} 的（你当前选的是 ${p?.name || '自定义'}）。确认下供应商选对了？`, 'hint warn');
+    return;
+  }
+  setKeyHint(p?.keyRe ? `✓ 格式与 ${p.name} 匹配` : 'Key 已填，点「试一下」验证', 'hint ok');
+}
+
+// 贴 Key 自动认供应商：只认前缀唯一的，国内几家都是 sk- 开头就不乱猜
+function autoPickByKey() {
+  const id = detectProviderByKey($('set-key').value);
+  if (!id || id === state.preset) return;
+  const p = PRESETS.find((x) => x.id === id);
+  state.preset = id;
+  applyPreset(id);
+  paintProvInfo(id);
+  setAdvanced(false);
+  paintKeyHint(`✓ 已按 Key 认出是「${p.name}」，地址和模型都填好了`);
+}
+
 // 模型名纠错： cur 为空 → 取列表第一个；完全匹配 → 不动；模糊包含 → 用匹配项；否则 null（保留原值）
 function bestModelMatch(cur, ids) {
   if (!ids.length) return null;
@@ -310,52 +415,75 @@ function syncModelLists(ids) {
 
 function fillSettingsForm() {
   const s = state.settings || {};
-  const presetId = s.preset || 'deepseek';
+  // 这个弹窗只管"自带 Key"的配置。邀请码/匿名模式在登录里，不在这里配。
+  const presetId = (s.preset && s.preset !== 'invite') ? s.preset : 'deepseek';
   state.preset = presetId;
-  if (!s.baseURL) {
-    // 从未保存过：预设默认生效并预填字段——用户只需粘一个 key
+  if (!s.baseURL || s.preset === 'invite') {
+    // 从未保存过（或当前是邀请码模式）：预设默认生效并预填字段——用户只需粘一个 key
     applyPreset(presetId);
   } else {
     $('set-base').value = s.baseURL;
     $('set-model').value = s.model || '';
     $('set-vmodel').value = s.vmodel || '';
   }
-  $('set-key').value = s.apiKey || '';
+  // 邀请码模式下 apiKey 存的是邀请码，不是 API Key —— 别把它当 Key 显示出来
+  $('set-key').value = (s.preset === 'invite') ? '' : (s.apiKey || '');
   setAdvanced(presetId === 'custom');
+  paintProvInfo(presetId);
 }
 function openSettings() {
   $('modal-settings').classList.add('show'); $('modal-mask').classList.add('show');
   fillSettingsForm();
-  // 已有地址和 key 时自动拉一次模型列表
-  if ($('set-base').value.trim() && $('set-key').value.trim()) fetchModels();
+  $('diag-result').innerHTML = '';
+  $('models-result').textContent = '';
 }
 function closeSettings() { $('modal-settings').classList.remove('show'); $('modal-mask').classList.remove('show'); }
-function saveSettings() {
+function saveSettings(opts = {}) {
+  const preset = state.preset || 'deepseek';
+  const key = $('set-key').value.trim();
+  const isLocal = PRESETS.find((x) => x.id === preset)?.status === 'local';
+  // 没填 Key 又不是本地模型：存下来也是一份坏配置，别让新手以为配好了
+  if (!key && !isLocal) {
+    banner('还没填 API Key —— 贴上再保存；或者点上面的「不想折腾」用内置算力。', 'bad');
+    return;
+  }
   state.settings = {
-    preset: state.preset || 'deepseek',
+    preset,
     baseURL: $('set-base').value.trim(), model: $('set-model').value.trim(),
-    apiKey: $('set-key').value.trim(), vmodel: $('set-vmodel').value.trim(),
+    apiKey: key, vmodel: $('set-vmodel').value.trim(),
   };
   localStorage.setItem('duograder_settings_v1', JSON.stringify(state.settings));
-  $('btn-settings').textContent = state.settings.baseURL && state.settings.apiKey ? '设置 ●' : '设置';
+  $('btn-settings').textContent = state.settings.baseURL && (state.settings.apiKey || state.settings.preset === 'ollama' || state.settings.preset === 'lmstudio') ? '设置 ●' : '设置';
   updateLoginBtn();
+  if (opts.keepOpen) return;
   closeSettings();
-  banner('设置已保存。', 'info');
+  banner(opts.message || '设置已保存。', 'info');
   setTimeout(() => { $('banner-area').innerHTML = ''; }, 2500);
 }
-/* 一键诊断（仿主流 harness）：直连探测 → 模型列表 → 主模型对话 → 视觉模型真图测试 */
+/* 试一下（仿主流 harness 的 connection check）：直连探测 → 模型列表 → 主模型对话 → 视觉模型真图测试
+   每一项失败都给"怎么办"——新手最需要的是下一步动作，不是错误码。
+   返回 true = 主链路可用，可以保存。 */
 async function runDiagnostics() {
   const base = $('set-base').value.trim().replace(/\/+$/, '');
   const key = $('set-key').value.trim();
   let model = $('set-model').value.trim();
   let vmodel = $('set-vmodel').value.trim();
   const box = $('diag-result');
-  if (!base) { box.innerHTML = diagLine(false, 'Base URL', '先选预设或填地址'); return; }
+  const preset = PRESETS.find((x) => x.id === state.preset);
+  const isLocal = preset?.status === 'local';
+  if (!base) { box.innerHTML = diagLine(false, '① 浏览器直连', '还没填地址', '先在上面选一个供应商，地址会自动填好'); return false; }
 
   const btn = $('btn-diag');
-  btn.disabled = true; btn.textContent = '诊断中…';
+  btn.disabled = true; btn.textContent = '测试中…';
   const lines = [];
-  const push = (ok, name, detail) => { lines.push(diagLine(ok, name, detail)); box.innerHTML = lines.join(''); };
+  const push = (ok, name, detail, fix) => { lines.push(diagLine(ok, name, detail, fix)); box.innerHTML = lines.join(''); };
+
+  // 0. Key 与所选供应商是否对得上（软提示，不拦）
+  const bad = keyLooksMismatched(state.preset, key);
+  if (bad) {
+    push(false, '⓪ Key 格式', `这个 Key 看起来不像 ${bad} 的`,
+      `你当前选的是「${preset?.name || '自定义'}」。若确实要用这把 Key，把上面的供应商改成 ${bad}；若要换 Key，先把供应商改对。`);
+  }
 
   // 1. 直连探测（无需 key：能读到任何 HTTP 状态码即证明浏览器可跨域直连）
   push(null, '① 浏览器直连', '探测中…');
@@ -363,14 +491,19 @@ async function runDiagnostics() {
   if (probe.ok) {
     const readable = probe.status < 500;
     push(readable, '① 浏览器直连', `可直连（HTTP ${probe.status} · ${probe.ms}ms）${probe.status === 401 ? '——401 属正常，未填 key' : ''}`);
-    if (!readable) { finish(); return; }
+    if (!readable) { finish(false); return false; }
   } else {
-    push(false, '① 浏览器直连', `${probe.error}（${probe.ms}ms）——网络不通或该供应商拦跨域，手机上会同样失败，需换供应商或加本地反代`);
-    finish(); return;
+    const fix = isLocal
+      ? '本地模型要先跑起来：Ollama 执行 `ollama serve` 再 `ollama pull qwen2.5:7b`；LM Studio 要在设置里打开 Local Server。手机打不开是正常的。'
+      : preset?.status === 'blocked'
+        ? '这家浏览器直连被拦。用「桌面壳」跑（cd app && npm start），或让对方给你一个反代地址，填进高级设置的 Base URL。'
+        : '多半是网络问题，或这家拦跨域。换一家试试（DeepSeek 便宜且国内直连），或改用桌面壳。';
+    push(false, '① 浏览器直连', `${probe.error}（${probe.ms}ms）`, fix);
+    finish(false); return false;
   }
 
   // 2. 模型列表（用真 key）+ 模型名自动纠正
-  if (!key) { push(false, '② 模型列表', '未填 API Key，跳过后续检查'); finish(); return; }
+  if (!key && !isLocal) { push(false, '② 模型列表', '没填 API Key，跳过后续检查', '把 Key 贴到上面的输入框；本地模型才不用 Key'); finish(false); return false; }
   push(null, '② 模型列表', '拉取中…');
   let knownIds = null;
   try {
@@ -380,17 +513,24 @@ async function runDiagnostics() {
     push(true, '② 模型列表', `key 有效，共 ${knownIds.length} 个模型` + (fixes.length ? `，已自动纠正：${fixes.join('、')}` : ''));
   } catch (e) {
     const m = /HTTP (\d+)/.exec(e.message);
-    push(false, '② 模型列表', `${e.message}${m ? '：' + httpErrorHint(Number(m[1])) : '（该服务商可能不开放 /models，不影响批改）'}`);
+    const fix = m && m[1] === '401'
+      ? 'Key 不对或没生效：确认复制全了、末尾没带空格。有些平台不充值就直接 401。'
+      : m && (m[1] === '403')
+        ? 'Key 无权限或账户被限：去控制台看余额/权限，或换个 Key。'
+        : '这家可能不开放 /models，不影响批改——只要上面主模型名对就行。';
+    push(false, '② 模型列表', `${e.message}${m ? '：' + httpErrorHint(Number(m[1])) : ''}`, fix);
   }
 
   // 3. 主模型对话（真实 completion；400 时解析"可用型号"自动换用重试一次）
-  if (!model) { push(false, '③ 主模型对话', '未填模型名'); }
+  let chatOk = false;
+  if (!model) { push(false, '③ 主模型对话', '没填模型名', '点高级设置里的「拉取模型列表」，从下拉里选一个'); }
   else {
     push(null, '③ 主模型对话', `向 ${model} 发送测试消息…`);
     const t0 = Date.now();
     try {
       const out = await callChat({ baseURL: base, model, apiKey: key }, chatTestMessages(), { temperature: 0 });
       push(true, '③ 主模型对话', `${model} 回复"${out.trim().slice(0, 20)}" · ${Date.now() - t0}ms`);
+      chatOk = true;
     } catch (e) {
       const fixed = await tryFixFrom400(e, base, key, 'set-model', knownIds);
       if (fixed) {
@@ -398,16 +538,17 @@ async function runDiagnostics() {
         try {
           const out = await callChat({ baseURL: base, model, apiKey: key }, chatTestMessages(), { temperature: 0 });
           push(true, '③ 主模型对话', `已自动换用 ${model}，回复"${out.trim().slice(0, 20)}" · ${Date.now() - t0}ms`);
-        } catch (e2) { push(false, '③ 主模型对话', `换用 ${model} 后仍失败：${shortErr(e2.message)}`); }
+          chatOk = true;
+        } catch (e2) { push(false, '③ 主模型对话', `换用 ${model} 后仍失败：${shortErr(e2.message)}`, '这个模型不可用：点高级设置里的「拉取模型列表」从下拉里挑一个。'); }
       } else {
-        push(false, '③ 主模型对话', shortErr(e.message));
+        push(false, '③ 主模型对话', shortErr(e.message), modelFixHint(e, model));
       }
     }
   }
 
   // 4. 视觉模型真图测试（32px 纯色图，验证多模态与拍照转写链路）
   const vm = vmodel || model;
-  if (!vm) { push(false, '④ 视觉模型', '未填视觉模型'); }
+  if (!vm) { push(false, '④ 视觉模型', '没填视觉模型', '拍照转写要一个认图的型号：glm-4v-flash / qwen-vl-plus / deepseek-flash / gpt-4o-mini'); }
   else {
     push(null, '④ 视觉模型', `向 ${vm} 发一张测试图…`);
     const t0 = Date.now();
@@ -420,23 +561,42 @@ async function runDiagnostics() {
         try {
           const out = await callChat({ baseURL: base, model: fixed, apiKey: key }, visionTestMessages(testImage()), { temperature: 0 });
           push(true, '④ 视觉模型', `已自动换用 ${fixed}，认出"${out.trim().slice(0, 20)}"（红色）· ${Date.now() - t0}ms —— 拍照转写链路可用`);
-        } catch (e2) { push(false, '④ 视觉模型', `换用 ${fixed} 后仍失败：${shortErr(e2.message)}`); }
+        } catch (e2) { push(false, '④ 视觉模型', `换用 ${fixed} 后仍失败：${shortErr(e2.message)}`, '换个认图的型号，或留空让它用主模型（但主模型多半不认图，拍照会失败）'); }
       } else {
         const m = /HTTP (\d+)/.exec(e.message);
-        push(false, '④ 视觉模型', shortErr(e.message) + (m && m[1] === '400' ? '（该型号可能不支持图片输入，换多模态型号）' : ''));
+        push(false, '④ 视觉模型', shortErr(e.message) + (m && m[1] === '400' ? '（这个型号不认图）' : ''),
+          '换成多模态型号：glm-4v-flash / qwen-vl-plus / deepseek-flash / gpt-4o-mini；点「拉取模型列表」挑带 vision 的。');
       }
     }
   }
-  finish();
+  finish(chatOk);
+  return chatOk;
 
-  function finish() {
-    btn.disabled = false; btn.textContent = '一键诊断';
+  function finish(ok) {
+    btn.disabled = false; btn.textContent = '试一下';
+    if (!ok) box.insertAdjacentHTML('beforeend', `<div class="diag-line bad"><span class="d-ico">!</span><span class="d-body"><span class="d-name">下一步</span><span class="d-detail">按上面每条的"怎么办"改，改完再点一次「试一下」。</span></span></div>`);
   }
 }
-function diagLine(ok, name, detail) {
+
+// 主模型不通时给什么建议
+function modelFixHint(err, model) {
+  const m = /HTTP (\d+)/.exec(String(err.message));
+  const code = m ? Number(m[1]) : 0;
+  if (code === 401) return 'Key 不对或没生效：确认复制全了、没带空格。有些平台不充值直接 401。';
+  if (code === 402 || code === 403) return '账户没余额或没权限：去控制台充值/开通该模型权限。';
+  if (code === 429) return '被限流了：等一会儿再试，或换一家。';
+  if (code === 404) return `地址或型号不对：确认 Base URL 和模型名「${model}」；点「拉取模型列表」从下拉里选。`;
+  if (/超时/.test(String(err.message))) return '模型太慢或网络抖：换一个更快的型号，或重试一次。';
+  return '点高级设置里的「拉取模型列表」，从下拉里挑一个你账号真正可用的型号。';
+}
+function diagLine(ok, name, detail, fix) {
   const icon = ok === null ? '…' : ok ? '✓' : '✗';
   const cls = ok === null ? 'doing' : ok ? 'ok' : 'bad';
-  return `<div class="diag-line ${cls}"><span class="d-ico">${icon}</span><span class="d-name">${esc(name)}</span><span class="d-detail">${esc(detail)}</span></div>`;
+  return `<div class="diag-line ${cls}"><span class="d-ico">${icon}</span><span class="d-body">`
+    + `<span class="d-name">${esc(name)}</span>`
+    + `<span class="d-detail">${esc(detail)}</span>`
+    + (fix ? `<span class="d-fix"><b>怎么办：</b>${esc(fix)}</span>` : '')
+    + `</span></div>`;
 }
 function shortErr(msg) {
   // 400 报错里服务商常附"可用型号清单"，解析成人话
@@ -481,7 +641,7 @@ async function fetchModels() {
   } catch (e) {
     $('models-result').textContent = '✗ 拉取失败：' + e.message + '（个别服务商不开放 /models 或拦跨域，手动填型号即可）';
   } finally {
-    btn.disabled = false; btn.textContent = '拉取模型';
+    btn.disabled = false; btn.textContent = '拉取模型列表';
   }
 }
 
@@ -1206,7 +1366,13 @@ function renderReport(final, facts, essay) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-init();
+init().catch((e) => {
+  // 初始化失败必须让用户看见：一个不会响应任何按钮的页面，比报错难查一百倍
+  console.error('DuoGrader init failed', e);
+  try {
+    $('banner-area').innerHTML = `<div class="banner">页面初始化失败：${esc(String(e?.message || e))}<br/>请刷新页面；若反复出现，去仓库 Issues 反馈。</div>`;
+  } catch {}
+});
 // 免费额度角标：页面载入即向 /v1/quota 查询本 IP 剩余次数（邀请码登录态则不显示）
 refreshFreeQuota();
 // e2e 调试钩子：只读暴露内部状态（不参与业务逻辑）

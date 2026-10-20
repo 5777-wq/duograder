@@ -129,50 +129,81 @@
 <!-- 设置弹窗 -->
 <div class="modal-mask" id="modal-mask"></div>
 <div class="modal" id="modal-settings">
-  <div class="modal-card">
+  <div class="modal-card modal-card-wide">
     <h3>API 设置 <span id="btn-settings-close">✕</span></h3>
+
+    <!-- ① 三条上手路径：先告诉新手"你该走哪条"，再给配置表单 -->
+    <div class="start-paths" id="start-paths">
+      <button type="button" class="path-card" data-path="invite">
+        <b>不想折腾</b><span>用内置算力，每 IP 免费 50 次</span>
+      </button>
+      <button type="button" class="path-card" data-path="byok">
+        <b>我有 API Key</b><span>选供应商 → 贴 Key → 试一下</span>
+      </button>
+      <button type="button" class="path-card" data-path="local">
+        <b>我要完全本地</b><span>Ollama / LM Studio，作文不出电脑</span>
+      </button>
+    </div>
+
+    <!-- ② 选供应商 -->
     <div class="field">
-      <label>供应商</label>
+      <label>① 选供应商</label>
       <div class="prov-wrap">
         <button type="button" class="prov-btn" id="prov-btn">
           <span id="prov-current">DeepSeek 官方</span>
+          <span class="p-status mut" id="prov-status">可直连</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
         </button>
         <div class="prov-list" id="prov-list" hidden></div>
       </div>
-      <div class="hint">官方预设只需填 Key；地址与模型已配好（高级设置可改）。</div>
+      <div class="hint" id="prov-blurb"></div>
     </div>
+
+    <!-- ③ 贴 Key -->
     <div class="field">
-      <label>API Key</label>
-      <input type="password" id="set-key" placeholder="sk-..." autocomplete="off" />
-      <div class="hint">以<b>明文</b>存在本浏览器（无后端、不上传）。勿在共用设备使用；历史与导出不含 Key。</div>
+      <label>② 贴上 API Key</label>
+      <div class="key-row">
+        <input type="password" id="set-key" placeholder="sk-..." autocomplete="off" />
+        <button type="button" class="icon-btn key-eye" id="btn-eye" title="显示 / 隐藏 Key">显示</button>
+      </div>
+      <div class="hint" id="key-hint"></div>
+      <div class="key-foot">
+        <a class="key-link" id="key-link" target="_blank" rel="noopener">去控制台申请 Key →</a>
+        <span class="key-note">Key 以明文存在本浏览器（无后端、不上传）。勿在共用设备使用。</span>
+      </div>
     </div>
-    <div class="field">
-      <label>主模型 · 批改用（点输入框下拉选择，或先点"拉取模型"）</label>
-      <input type="text" id="set-model" list="dl-models" placeholder="deepseek-chat / glm-4.6 / ..." />
-      <div class="hint">以你账号实际可用为准——拉取或诊断后不匹配会自动纠正。</div>
+
+    <!-- ④ 试一下 -->
+    <div class="btn-row">
+      <button class="btn-fill" id="btn-diag">试一下</button>
+      <button class="btn-ghost" id="btn-save">只保存不测试</button>
     </div>
-    <div class="field">
-      <label>视觉模型 · 拍照转写用（留空则用主模型）</label>
-      <input type="text" id="set-vmodel" list="dl-vmodels" placeholder="deepseek-flash / glm-4v-flash / qwen-vl-plus ..." />
-      <div class="hint">填账号可用的多模态型号即可；批改与转写共用同一个 Key。</div>
-    </div>
-    <div class="adv-toggle" id="adv-toggle"><span class="adv-arrow">▸</span> 高级设置（Base URL）</div>
+    <div class="diag" id="diag-result"></div>
+    <div class="hint" id="models-result" style="margin-top:6px;"></div>
+
+    <!-- ⑤ 高级：换模型 / 自定义地址（新手用不到，收起来） -->
+    <div class="adv-toggle" id="adv-toggle"><span class="adv-arrow">▸</span> 高级设置（换模型 / 自定义地址）</div>
     <div id="adv-fields" hidden>
+      <div class="field">
+        <label>主模型 · 批改用</label>
+        <input type="text" id="set-model" list="dl-models" placeholder="deepseek-chat / glm-4.6 / ..." />
+        <div class="hint">选好供应商后这里已经填好了，一般不用动。批改要长回复，模型要支持中文与 JSON 输出。</div>
+      </div>
+      <div class="field">
+        <label>视觉模型 · 拍照转写用（留空则用主模型）</label>
+        <input type="text" id="set-vmodel" list="dl-vmodels" placeholder="deepseek-flash / glm-4v-flash / qwen-vl-plus ..." />
+        <div class="hint">要能看图。留空就用主模型——但多数主模型不认图，拍照转写会失败。</div>
+      </div>
       <div class="field">
         <label>Base URL</label>
         <input type="text" id="set-base" placeholder="https://api.deepseek.com" />
       </div>
+      <div class="btn-row">
+        <button class="btn-ghost" id="btn-fetch-models">拉取模型列表</button>
+      </div>
     </div>
     <datalist id="dl-models"></datalist>
     <datalist id="dl-vmodels"></datalist>
-    <div class="btn-row">
-      <button class="btn-ghost" id="btn-fetch-models">拉取模型</button>
-      <button class="btn-fill" id="btn-diag">一键诊断</button>
-      <button class="btn-ghost" id="btn-save">保存</button>
-    </div>
-    <div class="diag" id="diag-result"></div>
-    <div class="hint" id="models-result" style="margin-top:6px;"></div>
   </div>
 </div>
 

@@ -1,6 +1,6 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
-import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail } from './core.js';
+import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched } from './core.js';
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -138,6 +138,22 @@ console.log('双评汇聚尺（报告头签名元素）');
   const empty = dualRail({ decision: 'same_band' }, 15, undefined, undefined);
   ok('缺初评数据时显示 ? 且不崩', empty.includes('>?'));
   ok('缺初评数据时比例退化为 0', empty.includes('--ratio:0.0000'));
+}
+
+console.log('Key 识别（贴 Key 自动认供应商）');
+{
+  ok('OpenRouter 前缀认出', detectProviderByKey('sk-or-v1-abc123') === 'openrouter');
+  ok('Anthropic 前缀认出', detectProviderByKey('sk-ant-api03-xyz') === 'anthropic');
+  ok('Gemini 前缀认出', detectProviderByKey('AIzaSyABC') === 'gemini');
+  ok('OpenAI proj 前缀认出', detectProviderByKey('sk-proj-' + 'a'.repeat(24)) === 'openai');
+  ok('智谱 id.secret 格式认出', detectProviderByKey('0123456789abcdef.0123456789abcdef') === 'glm');
+  ok('火山 UUID 认出', detectProviderByKey('123e4567-e89b-12d3-a456-426614174000') === 'ark');
+  ok('国内通用 sk- 不乱猜（宁可不猜也不猜错）', detectProviderByKey('sk-' + 'a'.repeat(32)) === null);
+  ok('空 Key 不猜', detectProviderByKey('') === null);
+  ok('Key 与所选供应商不符时能提示', keyLooksMismatched('deepseek', 'sk-ant-api03-xyz') !== null);
+  ok('Key 与所选供应商相符时不误报', keyLooksMismatched('deepseek', 'sk-' + 'a'.repeat(32)) === null);
+  ok('没设格式规则的供应商不误报', keyLooksMismatched('qwen', 'sk-随便什么') === null);
+  ok('空 Key 不提示', keyLooksMismatched('deepseek', '') === null);
 }
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');

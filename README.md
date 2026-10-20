@@ -39,7 +39,7 @@
 ## 四种用法
 
 **🌐 网页 / 手机（推荐，零安装）**
-打开 [duograder.pages.dev/app](https://duograder.pages.dev/app/) → 设置里选供应商、填 API Key →「一键诊断」四项全绿 → 拍照或拖入作文 → 核对 AI 转写 → 双评。手机浏览器打开后"添加到主屏幕"即是全屏 App。
+打开 [duograder.pages.dev/app](https://duograder.pages.dev/app/) → 设置里选供应商、贴上 API Key → 点「试一下」，四项全绿就自动保存 → 拍照或拖入作文 → 核对 AI 转写 → 双评。手机浏览器打开后"添加到主屏幕"即是全屏 App。
 
 **📦 安卓 App**
 直接下载 [最新版 APK](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)（安装需允许未知来源）。原生壳为 Capacitor，源码在本仓 `android/`；推送 `app/` 或 `android/` 变更后 CI（apk.yml）自动构建，也可 GitHub 页面手动触发。无跨域限制，任意供应商可直连。
@@ -51,6 +51,27 @@ cd app && npm ci && npm start
 自用本地应用：内置静态服务器 + 放开渲染进程跨域限制，**任意供应商 API 都能直连**（不用再装浏览器 CORS 插件）。本地服务器只暴露 `app/` 与 `skill/` 两个子树，仓库里的 `.git/`、`data/`（你的批改记录）都在射程之外。
 
 **🤖 [Agent Skill](#-agent-skill)**
+
+## API 设置怎么填（新手向）
+
+设置弹窗的主流程只有三步，模型名和地址这些容易劝退人的字段都收进了「高级设置」：
+
+| 步骤 | 做什么 | 说明 |
+|---|---|---|
+| **先选路径** | 不想折腾 / 我有 API Key / 我要完全本地 | 「不想折腾」直接走内置算力（每 IP 免费 50 次），「完全本地」自动切到 Ollama |
+| **① 选供应商** | 每个选项都写清了「适合谁」和直连状态 | 🟢 可直连 / 🔴 需反代 / ⚪ 仅本地，一眼知道哪家能用 |
+| **② 贴上 API Key** | 贴上去自动填好地址与模型 | Key 前缀能认出来的（OpenRouter / Anthropic / Gemini / 智谱 / 火山）会自动切供应商；认不出来的**不乱猜** |
+
+然后点**「试一下」**：直连 → 模型列表 → 主模型对话 → 视觉模型真图测试，四项全绿才自动保存。
+
+**每项失败都给出「怎么办」，而不是甩一个错误码。** 新手最常撞的坑都写在里面了：
+
+- **浏览器直连被拦**（本 app 的头号坑）——这家供应商不允许网页跨域调用。办法：改用桌面壳（`cd app && npm start`），或让对方给你一个反代地址填进高级设置的 Base URL。
+- **401 / 403** —— Key 不对、没复制全、或者账户没充值（不少平台不充值直接 401）。
+- **主模型不通** —— 多半是模型名不对，点「拉取模型列表」从下拉里挑一个账号真正可用的。
+- **视觉模型失败** —— 这个型号不认图，换 `glm-4v-flash` / `qwen-vl-plus` / `gpt-4o-mini` 这类多模态型号。拍照转写必须有一个认图的模型，主模型通常不认图。
+
+> 不知道选哪家？**DeepSeek** 最便宜且国内直连，适合第一次用；**OpenRouter** 一把 Key 调几十家模型（有免费模型可白嫖）；**Ollama / LM Studio** 完全本地、作文不出电脑；**火山方舟 / Anthropic** 质量好但浏览器直连被拦，得配桌面壳。
 
 ## 🤖 Agent Skill
 
@@ -122,11 +143,11 @@ git clone https://github.com/5777-wq/duograder.git
 | 5 | 句级种子查全率 | 预植错误检出 | ✅ 内核 v1.0 92% → v1.3 **100%**，误报 0（[记录](docs/validation/kernel-eval-20261009/SUMMARY.md)） |
 | 6 | 跨档位覆盖 | 英一 20 分档 / 小作文 10 分档 | ✅ 分值表、档位区间、格式检测均正确（[报告](docs/validation/coverage-20261009/SUMMARY.md)） |
 
-### 工程回归（CI 每次 push 跑，121 项断言）
+### 工程回归（CI 每次 push 跑，133 项断言）
 
 | 套件 | 断言 | 守住什么 |
 |---|---|---|
-| `node app/test.mjs` | 55 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度 |
+| `node app/test.mjs` | 67 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别 |
 | `node proxy/proxy-core.test.mjs` | 28 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、IPv6 归并、限速表不无界增长 |
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
 | `node app/static-server.test.mjs` | 20 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding |
