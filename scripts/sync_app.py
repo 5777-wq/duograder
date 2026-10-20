@@ -50,6 +50,9 @@ PROXY_COPIES = [
 # 所以在 app/ 下放一份构建期副本（真源仍是仓库根的 skill/）。
 DESKTOP_SKILL = ROOT / "app" / "skill"
 
+# 这些是本地跑脚本产生的中间物，不该进包（__pycache__ 的 .pyc 就有几十 KB）
+SKIP_DIRS = ("__pycache__", "*.pyc")
+
 CHECK_ONLY = "--check" in sys.argv
 
 
@@ -104,7 +107,7 @@ def check_desktop_skill() -> list:
 def sync_desktop_skill():
     if DESKTOP_SKILL.exists():
         shutil.rmtree(DESKTOP_SKILL)
-    shutil.copytree(ROOT / "skill", DESKTOP_SKILL)
+    shutil.copytree(ROOT / "skill", DESKTOP_SKILL, ignore=shutil.ignore_patterns(*SKIP_DIRS))
     print("✓ app/skill/ 已同步（桌面壳打包用）")
 
 
@@ -118,7 +121,7 @@ def sync_skill(dest_root: Path):
     skill = dest_root / "skill"
     if skill.exists():
         shutil.rmtree(skill)
-    shutil.copytree(ROOT / "skill", skill)
+    shutil.copytree(ROOT / "skill", skill, ignore=shutil.ignore_patterns(*SKIP_DIRS))
 
 
 def sync_pages_dist():
