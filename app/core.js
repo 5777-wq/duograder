@@ -232,6 +232,134 @@ export function draftIsRestorable(draft, lastGradedAt) {
   return Number(draft.ts || 0) > Number(lastGradedAt || 0);
 }
 
+// —— 历史成绩分析 ——
+// 不同科目题型的满分不同（英一大作文 20 / 英二大作文 15 / 小作文 10），
+// 直接把原始分画在一条线上没法比，所以默认按"得分率"（得分 / 满分）画——
+// 同一条线上才看得出是进步还是退步。
+export function buildScoreCurve(history) {
+  const rows = (history || []).map((it) => {
+    const max = MAX_SCORES[`${it?.track}_${it?.task}`] || 0;
+    const score = Number(it?.final?.final_score);
+    const at = Number(it?.id) || 0;
+    if (!max || !Number.isFinite(score) || !at) return null;
+    return {
+      id: it.id, at, track: it.track, task: it.task, max, score,
+      rate: score / max,
+      band: it?.final?.final_band ?? null,
+      words: it?.facts?.word_count ?? null,
+    };
+  }).filter(Boolean).sort((a, b) => a.at - b.at);
+
+  if (!rows.length) return { points: [], stats: null, groups: [] };
+
+  const rates = rows.map((r) => r.rate);
+  const avg = rates.reduce((s, r) => s + r, 0) / rates.length;
+  const best = rows.reduce((a, b) => (b.rate > a.rate ? b : a));
+  const worst = rows.reduce((a, b) => (b.rate < a.rate ? b : a));
+
+  // 趋势：后半段平均 vs 前半段平均。少于 4 条时样本不足以说趋势，直接说不知道。
+  let trend = 0;
+  if (rows.length >= 4) {
+    const half = Math.floor(rows.length / 2);
+    const avgOf = (arr) => arr.reduce((s, r) => s + r.rate, 0) / arr.length;
+    trend = avgOf(rows.slice(rows.length - half)) - avgOf(rows.slice(0, half));
+  }
+
+  // 按科目题型分组小计
+  const gmap = new Map();
+  for (const r of rows) {
+    const k = `${r.track}_${r.task}`;
+    if (!gmap.has(k)) gmap.set(k, { key: k, track: r.track, task: r.task, max: r.max, count: 0, sum: 0 });
+    const g = gmap.get(k);
+    g.count++; g.sum += r.rate;
+  }
+  const groups = [...gmap.values()].map((g) => ({ ...g, avgRate: g.sum / g.count }));
+
+  return {
+    points: rows,
+    stats: {
+      count: rows.length,
+      avgRate: avg,
+      best, worst,
+      trend,
+      trendLabel: rows.length < 4
+        ? '样本太少，暂不判断趋势'
+        : trend > 0.02 ? '最近在进步'
+          : trend < -0.02 ? '最近有回落' : '基本持平',
+    },
+    groups,
+  };
+}
+
+const pct = (r) => Math.round(r * 100);
+const fmtDay = (ms) => {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+};
+// SVG 文本/属性里 & < > " ' 要转义
+function escAttr(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 画成绩曲线（纯 SVG 字符串，零依赖）。y 轴按数据自适应并标出端点值，
+// 每个点也标了百分比——不是从 0 起的裁剪轴，但数值一个不落。
+export function renderScoreChart(curve) {
+  const pts = (curve && curve.points) || [];
+  if (!pts.length) return { svg: '', empty: true };
+
+  const W = 400, H = 170, PL = 34, PR = 12, PT = 16, PB = 26;
+  const iw = W - PL - PR, ih = H - PT - PB;
+
+  const rates = pts.map((p) => p.rate);
+  const lo = Math.min(...rates), hi = Math.max(...rates);
+  const pad = Math.max(0.03, (hi - lo) * 0.3);
+  let y0 = Math.max(0, lo - pad), y1 = Math.min(1, hi + pad);
+  if (y1 - y0 < 0.06) { const c = (y0 + y1) / 2; y0 = Math.max(0, c - 0.04); y1 = Math.min(1, c + 0.04); }
+
+  const t0 = pts[0].at, t1 = pts[pts.length - 1].at, span = t1 - t0;
+  const X = (i) => (span > 0 ? PL + ((pts[i].at - t0) / span) * iw : PL + iw / 2);
+  const Y = (r) => PT + ih * (1 - (r - y0) / (y1 - y0 || 1));
+
+  const grid = [y0, (y0 + y1) / 2, y1].map((v) =>
+    `<line x1="${PL}" y1="${Y(v).toFixed(1)}" x2="${W - PR}" y2="${Y(v).toFixed(1)}" stroke="var(--hairline)" stroke-width="1"/>
+     <text x="${PL - 6}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--sans)">${pct(v)}%</text>`
+  ).join('');
+
+  const avg = curve.stats ? curve.stats.avgRate : 0;
+  const meanLine = (avg >= y0 && avg <= y1)
+    ? `<line x1="${PL}" y1="${Y(avg).toFixed(1)}" x2="${W - PR}" y2="${Y(avg).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>`
+    : '';
+
+  const coords = pts.map((p, i) => `${X(i).toFixed(1)},${Y(p.rate).toFixed(1)}`).join(' ');
+  const poly = pts.length > 1
+    ? `<polyline points="${coords}" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="miter" stroke-linecap="square"/>`
+    : '';
+
+  const showVals = pts.length <= 8;
+  const dots = pts.map((p, i) => {
+    const last = i === pts.length - 1;
+    const x = X(i), y = Y(p.rate);
+    const color = last ? 'var(--accent)' : 'var(--ink)';
+    const s = last ? 5 : 4;
+    return `<g class="dg-point" data-id="${p.id}" role="button" tabindex="0" aria-label="${escAttr(`${fmtDay(p.at)} ${p.score}/${p.max} 分`)}">
+      <rect x="${(x - s / 2).toFixed(1)}" y="${(y - s / 2).toFixed(1)}" width="${s}" height="${s}" fill="${color}"/>
+      <title>${escAttr(`${fmtDay(p.at)} · ${p.score}/${p.max} 分（${pct(p.rate)}%）`)}</title>
+    </g>` + (showVals
+      ? `<text x="${x.toFixed(1)}" y="${(y - 9).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--sans)">${pct(p.rate)}%</text>`
+      : '');
+  }).join('');
+
+  const xLabels = pts.length > 1
+    ? `<text x="${PL}" y="${H - 7}" font-size="9" fill="var(--muted)" font-family="var(--sans)">${fmtDay(t0)}</text>
+       <text x="${W - PR}" y="${H - 7}" text-anchor="end" font-size="9" fill="var(--muted)" font-family="var(--sans)">${fmtDay(t1)}</text>`
+    : `<text x="${(PL + iw / 2).toFixed(1)}" y="${H - 7}" text-anchor="middle" font-size="9" fill="var(--muted)" font-family="var(--sans)">${fmtDay(t0)}</text>`;
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="dg-chart" role="img" aria-label="历史得分率曲线">
+    ${grid}${meanLine}${poly}${dots}${xLabels}
+  </svg>`;
+  return { svg, empty: false };
+}
+
 export function validateReport(report, essayText) {
   const failures = [], warnings = [];
   const essayNorm = essayText.trim().split(/\s+/).join(' ');

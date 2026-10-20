@@ -5,6 +5,7 @@ import {
   probeCors, fetchModelList, chatTestMessages, visionTestMessages, httpErrorHint, PRESETS, RECOMMENDED, STATUS_LABEL,
   detectProviderByKey, keyLooksMismatched,
   DRAFT_KEY, LAST_GRADED_KEY, buildDraft, draftIsRestorable,
+  buildScoreCurve, renderScoreChart, MAX_SCORES,
 } from './core.js';
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +45,21 @@ async function init() {
   $('btn-login-save').addEventListener('click', saveLogin);
   $('btn-drawer-close').addEventListener('click', closeDrawer);
   $('drawer-mask').addEventListener('click', closeDrawer);
+  // 历史抽屉：曲线 / 列表 视图切换
+  $('drawer-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]');
+    if (!b) return;
+    histView = b.dataset.view;
+    syncHistView();
+  });
+  // 清空全部历史：两步确认，误点不会立刻清
+  $('btn-hist-clear').addEventListener('click', async () => {
+    if (!armConfirm($('btn-hist-clear'), '清空全部历史', '确认清空？不可撤销')) return;
+    await histClear();
+    renderHistory();
+    banner('历史记录已清空。', 'info');
+    setTimeout(() => { $('banner-area').innerHTML = ''; }, 2500);
+  });
   $('modal-mask').addEventListener('click', closeSettings);
   $('btn-settings-close').addEventListener('click', closeSettings);
   $('btn-diag').addEventListener('click', async () => {
@@ -727,6 +743,16 @@ async function histDel(id) {
     tx.onerror = () => rej(tx.error);
   });
 }
+// 清空全部历史（抽屉底部，同样两步确认）
+async function histClear() {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('history', 'readwrite');
+    tx.objectStore('history').clear();
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
 // 旧版 localStorage 数据一次性迁移
 async function histMigrate() {
   const raw = localStorage.getItem('duograder_history_v1');
@@ -736,15 +762,78 @@ async function histMigrate() {
     localStorage.removeItem('duograder_history_v1');
   } catch { /* 损坏数据直接放弃迁移 */ }
 }
+// 两步确认：第一次点击只进入"确认"态，4 秒内再点一次才真执行。
+// 误删一篇批改好的作文，学生赔不起。
+function armConfirm(el, normalText, armedText) {
+  if (el.dataset.armed === '1') {
+    clearTimeout(el._armTimer);
+    delete el.dataset.armed;
+    el.textContent = normalText;
+    el.classList.remove('armed');
+    return true;                       // 确认执行
+  }
+  el.dataset.armed = '1';
+  el.textContent = armedText || '确认删除';
+  el.classList.add('armed');
+  el._armTimer = setTimeout(() => {
+    delete el.dataset.armed;
+    el.textContent = normalText;
+    el.classList.remove('armed');
+  }, 4000);
+  return false;                          // 只进入确认态
+}
+
+// 历史抽屉：成绩曲线 / 全部记录
+let histView = 'curve';
 function openDrawer() { renderHistory(); $('drawer').classList.add('show'); $('drawer-mask').classList.add('show'); }
 function closeDrawer() { $('drawer').classList.remove('show'); $('drawer-mask').classList.remove('show'); }
 async function renderHistory() {
   const h = await histAll();
+  renderCurve(h);
+  renderHistList(h);
+  syncHistView();
+}
+function syncHistView() {
+  $('hist-curve').hidden = histView !== 'curve';
+  $('hist-list').hidden = histView !== 'list';
+  $('drawer-tabs').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.view === histView));
+}
+
+// 成绩曲线：统计条 + SVG 折线 + 分组小计
+function renderCurve(h) {
+  const box = $('hist-curve');
+  if (!h.length) {
+    box.innerHTML = '<div class="hint" style="padding:24px;text-align:center">还没有批改记录。<br/><br/>批改一次就会记下来，攒够几次就能看出曲线是涨还是跌。</div>';
+    return;
+  }
+  const curve = buildScoreCurve(h);
+  const st = curve.stats;
+  const chart = renderScoreChart(curve);
+  const delta = st.trend === 0 ? '' : ` <b>${st.trend > 0 ? '↑' : '↓'} ${Math.abs(Math.round(st.trend * 100))}%</b>`;
+  box.innerHTML = `
+    <div class="curve-stats">
+      <div class="cs"><span>批改</span><b>${st.count} 篇</b></div>
+      <div class="cs"><span>平均得分率</span><b>${Math.round(st.avgRate * 100)}%</b></div>
+      <div class="cs"><span>最高</span><b>${Math.round(st.best.rate * 100)}%</b></div>
+      <div class="cs"><span>最低</span><b>${Math.round(st.worst.rate * 100)}%</b></div>
+    </div>
+    <div class="curve-trend">${esc(st.trendLabel)}${delta}</div>
+    ${chart.svg}
+    <div class="curve-hint">纵轴是<b>得分率</b>（得分 ÷ 该题型满分）——三种题型满分不同，不折算没法比。点某个点可看那次的报告。</div>
+    <div class="curve-groups">
+      ${curve.groups.map((g) => `<div class="cg"><span>${esc(TRACKS[g.track] || g.track)} · ${esc(TASKS[g.task] || g.task)}</span><b>${g.count} 篇 · 均 ${Math.round(g.avgRate * 100)}%</b></div>`).join('')}
+    </div>`;
+  box.querySelectorAll('.dg-point').forEach((el) => {
+    el.addEventListener('click', () => openHistoryReport(el.dataset.id));
+  });
+}
+
+function renderHistList(h) {
   $('hist-list').innerHTML = h.length ? h.map((it) => `
     <div class="hist-item" data-id="${it.id}">
       <span class="hi-del" data-del="${it.id}">删除</span>
-      <div class="hi-score">${it.final.final_score}<small style="font-size:12px;color:var(--muted)"> / ${it.final.final_range ? '档位' + it.final.final_band : ''}</small></div>
-      <div class="hi-meta">${esc(it.ts)} · ${TRACKS[it.track]}${TASKS[it.task]} · ${it.final.final_band}档 ${it.final.final_score}分 · 初评 ${esc(String(it.final.initial?.[0]?.score ?? '?'))}/${esc(String(it.final.initial?.[1]?.score ?? '?'))}</div>
+      <div class="hi-score">${esc(String(it.final?.final_score ?? '?'))}<small style="font-size:12px;color:var(--muted)"> / ${esc(String(MAX_SCORES[`${it.track}_${it.task}`] || '?'))}</small></div>
+      <div class="hi-meta">${esc(it.ts)} · ${esc(TRACKS[it.track] || it.track)}${esc(TASKS[it.task] || it.task)} · ${esc(String(it.final?.final_band ?? '?'))}档 ${esc(String(it.final?.final_score ?? '?'))}分 · 初评 ${esc(String(it.final?.initial?.[0]?.score ?? '?'))}/${esc(String(it.final?.initial?.[1]?.score ?? '?'))}</div>
       <div class="hi-acts"><span class="hi-act" data-orig="${it.id}">原文</span><span class="hi-act" data-rep="${it.id}">报告</span></div>
     </div>`).join('') : '<div class="hint" style="padding:20px;text-align:center;">还没有批改记录</div>';
   $('hist-list').querySelectorAll('.hi-act').forEach((el) => el.addEventListener('click', async (ev) => {
@@ -754,6 +843,8 @@ async function renderHistory() {
   }));
   $('hist-list').querySelectorAll('.hist-item').forEach((el) => el.addEventListener('click', async (ev) => {
     if (ev.target.dataset.del) {
+      // 第一次点只进入确认态，第二次才真删
+      if (!armConfirm(ev.target, '删除', '确认删除')) return;
       await histDel(ev.target.dataset.del);
       renderHistory();
       return;

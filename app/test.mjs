@@ -1,6 +1,6 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
-import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched, buildDraft, draftIsRestorable } from './core.js';
+import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched, buildDraft, draftIsRestorable, buildScoreCurve, renderScoreChart } from './core.js';
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -169,6 +169,53 @@ console.log('草稿（页面被重载不丢作文）');
   ok('没有草稿不恢复', draftIsRestorable(null, 0) === false);
   ok('损坏的草稿不恢复', draftIsRestorable('x', 0) === false);
   ok('undefined 不炸', draftIsRestorable(undefined, 0) === false);
+}
+
+console.log('历史成绩曲线（得分率折线 + 统计）');
+{
+  const mk = (id, track, task, score) => ({ id, track, task, facts: { word_count: 150 }, final: { final_score: score, final_band: 3 } });
+  const h = [mk(3000, 'english-ii', 'large', 9), mk(2000, 'english-ii', 'large', 12), mk(1000, 'english-ii', 'large', 11)];
+  const c = buildScoreCurve(h);
+  ok('按时间正序（曲线左边是早期）', c.points[0].id === 1000 && c.points[2].id === 3000);
+  ok('得分率按该题型满分折算（12/15=80%）', Math.round(c.points[1].rate * 100) === 80);
+  ok('统计出批改次数', c.stats.count === 3);
+  ok('平均得分率算对', Math.round(c.stats.avgRate * 100) === 71);
+  ok('最高分识别正确', c.stats.best.id === 2000);
+  ok('最低分识别正确', c.stats.worst.id === 3000);
+  ok('不足 4 条不给趋势结论', c.stats.trendLabel.includes('样本太少'));
+  ok('按科目题型分组小计', c.groups.length === 1 && c.groups[0].count === 3);
+
+  const mixed = buildScoreCurve([mk(1, 'english-ii', 'large', 12), mk(2, 'english-i', 'large', 16)]);
+  ok('不同满分制折算到同一把尺子（12/15 与 16/20 都是 80%）',
+    Math.round(mixed.points[0].rate * 100) === 80 && Math.round(mixed.points[1].rate * 100) === 80);
+  ok('混合题型分两组', mixed.groups.length === 2);
+
+  const up = buildScoreCurve([1, 2, 3, 4].map((i) => mk(i * 1000, 'english-ii', 'large', 6 + i * 2)));
+  ok('4 条以上能判趋势', up.stats.trend > 0.02 && up.stats.trendLabel === '最近在进步');
+  const down = buildScoreCurve([1, 2, 3, 4].map((i) => mk(i * 1000, 'english-ii', 'large', 14 - i * 2)));
+  ok('分数下滑能判出来', down.stats.trend < -0.02 && down.stats.trendLabel === '最近有回落');
+
+  ok('空历史不炸', buildScoreCurve([]).points.length === 0 && buildScoreCurve([]).stats === null);
+  ok('脏数据被过滤掉', buildScoreCurve([{ id: 1, track: 'x', task: 'y', final: { final_score: 5 } }]).points.length === 0);
+  ok('undefined 不炸', buildScoreCurve(undefined).points.length === 0);
+}
+
+console.log('成绩曲线 SVG');
+{
+  const c = buildScoreCurve([
+    { id: 1, track: 'english-ii', task: 'large', final: { final_score: 9 } },
+    { id: 2, track: 'english-ii', task: 'large', final: { final_score: 12 } },
+  ]);
+  const { svg, empty } = renderScoreChart(c);
+  ok('不是空图', !empty && svg.startsWith('<svg'));
+  ok('有折线', svg.includes('<polyline'));
+  ok('每个点一个可点的方块', (svg.match(/class="dg-point"/g) || []).length === 2);
+  ok('纵轴标了百分比', svg.includes('%'));
+  ok('最后一个点用强调色', svg.includes('var(--accent)'));
+  ok('点带 aria-label（无障碍）', svg.includes('aria-label'));
+  ok('空数据返回空图', renderScoreChart(buildScoreCurve([])).empty === true);
+  const one = renderScoreChart(buildScoreCurve([{ id: 9, track: 'english-ii', task: 'large', final: { final_score: 9 } }]));
+  ok('只有一条记录也能画（一个点）', !one.empty && (one.svg.match(/class="dg-point"/g) || []).length === 1);
 }
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');

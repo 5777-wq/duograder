@@ -123,7 +123,16 @@
 <div class="drawer-mask" id="drawer-mask"></div>
 <aside class="drawer" id="drawer">
   <div class="drawer-head"><h3>批改历史</h3><button class="icon-btn" id="btn-drawer-close">关闭</button></div>
-  <div class="drawer-body" id="hist-list"></div>
+  <div class="drawer-tabs" id="drawer-tabs">
+    <button type="button" data-view="curve" class="on">成绩曲线</button>
+    <button type="button" data-view="list">全部记录</button>
+  </div>
+  <div class="drawer-body" id="hist-curve"></div>
+  <div class="drawer-body" id="hist-list" hidden></div>
+  <div class="drawer-foot">
+    <span class="drawer-foot-note">记录只存在本机浏览器</span>
+    <button type="button" class="btn-ghost danger" id="btn-hist-clear">清空全部历史</button>
+  </div>
 </aside>
 
 <!-- 设置弹窗 -->
