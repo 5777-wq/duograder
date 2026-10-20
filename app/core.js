@@ -210,6 +210,28 @@ export function dualRail(final, maxScore, ia, ib) {
   </div>`;
 }
 
+// —— 草稿：一次批改要跑 2-3 分钟，手机锁屏/切后台可能把页面重载 ——
+// 作文与题面在重载后就没了，学生得重打一遍；这里做一份本地草稿兜底。
+export const DRAFT_KEY = 'duograder_draft_v1';
+export const LAST_GRADED_KEY = 'duograder_last_graded_v1';
+
+export function buildDraft({ essay, prompt, track, task }) {
+  return {
+    essay: String(essay ?? ''),
+    prompt: String(prompt ?? ''),
+    track: track || '',
+    task: task || '',
+    ts: Date.now(),
+  };
+}
+
+// 该不该恢复？两份都不空，且比上次批改成功更晚——批改成功的草稿已经被消费掉了
+export function draftIsRestorable(draft, lastGradedAt) {
+  if (!draft || typeof draft !== 'object') return false;
+  if (!String(draft.essay ?? '').trim() && !String(draft.prompt ?? '').trim()) return false;
+  return Number(draft.ts || 0) > Number(lastGradedAt || 0);
+}
+
 export function validateReport(report, essayText) {
   const failures = [], warnings = [];
   const essayNorm = essayText.trim().split(/\s+/).join(' ');

@@ -12,7 +12,13 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const ALLOW_DIRS = ['app', 'skill'];       // 白名单：只有这两个子树可被读取
+// 开发态（仓库根为服务根）：只暴露 app/ 与 skill/ 两个子树
+const DEV_ALLOW_DIRS = ['app', 'skill'];
+// 打包态（asar 根为服务根）：页面文件直接在根上，额外放行这些文件
+const PACKAGED_ROOT_FILES = new Set([
+  'index.html', 'ui.js', 'core.js', 'style.css', 'sw.js',
+  'logo.svg', 'icon.png', 'icon-192.png', 'manifest.json',
+]);
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -22,7 +28,9 @@ const MIME = {
 };
 
 // 把 URL 路径解析成服务根内的真实文件；越界 / 不在白名单 / 编码非法则返回 null
-function resolveSafePath(root, urlPath) {
+function resolveSafePath(root, urlPath, opts = {}) {
+  const allowDirs = opts.allowDirs || DEV_ALLOW_DIRS;
+  const rootFiles = opts.rootFiles || null;
   let decoded;
   try {
     decoded = decodeURIComponent(urlPath);
@@ -34,8 +42,13 @@ function resolveSafePath(root, urlPath) {
   // 按路径分量判断：相对路径不得以 .. 开头，也不得跳到绝对路径
   const rel = path.relative(root, fp);
   if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  const top = rel.split(path.sep)[0];
-  if (!ALLOW_DIRS.includes(top)) return null;
+  const parts = rel.split(path.sep);
+  if (parts.length === 1) {
+    // 根级文件：打包态放行固定清单，开发态一律不放行
+    if (rootFiles && rootFiles.has(parts[0])) return fp;
+    return null;
+  }
+  if (!allowDirs.includes(parts[0])) return null;
   return fp;
 }
 
@@ -44,7 +57,7 @@ function hostAllowed(host) {
   return /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host);
 }
 
-function createStaticServer(root) {
+function createStaticServer(root, opts = {}) {
   return http.createServer((req, res) => {
     let urlPath;
     try {
@@ -55,8 +68,8 @@ function createStaticServer(root) {
     if (!hostAllowed(String(req.headers.host || ''))) {
       res.writeHead(403); return res.end();
     }
-    if (urlPath === '/' || urlPath === '') urlPath = '/app/index.html';
-    const fp = resolveSafePath(root, urlPath);
+    if (urlPath === '/' || urlPath === '') urlPath = opts.indexPath || '/app/index.html';
+    const fp = resolveSafePath(root, urlPath, opts);
     if (!fp) { res.writeHead(403); return res.end(); }
     fs.readFile(fp, (err, data) => {
       if (err) { res.writeHead(404); return res.end('not found'); }
@@ -66,4 +79,4 @@ function createStaticServer(root) {
   });
 }
 
-module.exports = { ALLOW_DIRS, MIME, resolveSafePath, hostAllowed, createStaticServer };
+module.exports = { DEV_ALLOW_DIRS, PACKAGED_ROOT_FILES, MIME, resolveSafePath, hostAllowed, createStaticServer };

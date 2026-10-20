@@ -24,10 +24,10 @@
       "ui.js",
       "core.js",
       "style.css",
+      "sw.js",
       "logo.svg",
-      "../skill/**",
-      "../LICENSE",
-      "../README.md"
+      "manifest.json",
+      "skill/**"
     ],
     "win": {
       "target": [

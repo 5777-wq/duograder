@@ -1,0 +1,65 @@
+name: Desktop · Windows 便携版
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "app/**"
+      - "skill/kaoyan-essay/**"
+      - "scripts/sync_app.py"
+      - ".github/workflows/desktop.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 打包需要 app/skill/（skill/ 的构建期副本）与同步后的 www/
+      - name: 同步副本
+        run: python scripts/sync_app.py
+
+      - name: 安装依赖
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+
+      - name: 打包便携版 exe
+        working-directory: app
+        run: npx electron-builder --win portable --publish never
+
+      - name: 重命名产物
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "dist/*.exe" | Select-Object -First 1
+          if ($exe) { Rename-Item $exe.FullName "DuoGrader.exe" }
+          else { Write-Error "没找到打包产物"; exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuoGrader-desktop
+          path: app/dist/*.exe
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: DuoGrader-desktop
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe

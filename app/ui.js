@@ -4,6 +4,7 @@ import {
   graderMessages, arbiterMessages, repairMessages, callChat, transcriptionMessages, detectTaskType,
   probeCors, fetchModelList, chatTestMessages, visionTestMessages, httpErrorHint, PRESETS, RECOMMENDED, STATUS_LABEL,
   detectProviderByKey, keyLooksMismatched,
+  DRAFT_KEY, LAST_GRADED_KEY, buildDraft, draftIsRestorable,
 } from './core.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,7 +29,7 @@ async function init() {
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add('anim-ok')));
   bindSeg('seg-track', 'track');
   bindSeg('seg-task', 'task');
-  $('essay-in').addEventListener('input', updateCountBar);
+  $('essay-in').addEventListener('input', () => { updateCountBar(); scheduleDraft(); });
   $('btn-grade').addEventListener('click', () => {
     // 批改中再点 = 取消（中止进行中的 API 请求）
     if (state.busy && state.abort) { state.abort.abort(); return; }
@@ -139,8 +140,10 @@ async function init() {
   $('prompt-in').addEventListener('input', () => {
     clearTimeout(detectTimer);
     detectTimer = setTimeout(() => applyDetection(false), 500);
+    scheduleDraft();
   });
   fillSettingsForm();
+  restoreDraft();   // 页面被重载过的话，把上次没提交完的作文捡回来
   updateLoginBtn();
   updateCountBar();
   histMigrate().then(renderHistory);
@@ -158,7 +161,9 @@ async function init() {
     ]);
   } catch {
     state.kernel = null; // core.js 内置提示词兜底
-    banner('评分规则加载失败：请从仓库根目录启动本地服务器（python -m http.server 8650），再访问 /app/', 'bad');
+    banner(navigator.onLine === false
+      ? '当前离线：应用壳和历史记录仍可查看，但评分规则要联网才能加载，批改也需要联网。'
+      : '评分规则加载失败：请从仓库根目录启动本地服务器（python -m http.server 8650），再访问 /app/', 'bad');
   }
 }
 
@@ -166,8 +171,49 @@ function banner(text, kind = 'bad') {
   $('banner-area').innerHTML = `<div class="banner ${kind === 'info' ? 'info' : ''}">${esc(text)}</div>`;
 }
 
-/* ---------- 分段选择 / 字数条 ---------- */
-function bindSeg(id, key) {
+/* ---------- 草稿：页面被重载不丢作文 ---------- */
+/* 一次批改要跑 2-3 分钟。手机锁屏、切后台、浏览器回收标签页都可能让页面重载，
+   作文和题面在 DOM 里，重载即消失——学生刚转写好的手写作文得重打一遍。
+   这里在本地留一份草稿，批改成功后清掉。 */
+let draftTimer = null;
+function scheduleDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraft, 600);
+}
+function saveDraft() {
+  try {
+    const essay = $('essay-in').value;
+    const prompt = $('prompt-in').value;
+    if (!essay.trim() && !prompt.trim()) { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(buildDraft({ essay, prompt, track: state.track, task: state.task })));
+  } catch { /* 隐私模式/配额满：草稿存不下不影响主流程 */ }
+}
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    const lastGraded = Number(localStorage.getItem(LAST_GRADED_KEY) || 0);
+    if (!draftIsRestorable(draft, lastGraded)) { localStorage.removeItem(DRAFT_KEY); return; }
+    $('essay-in').value = draft.essay || '';
+    $('prompt-in').value = draft.prompt || '';
+    if (draft.track) setSeg('seg-track', draft.track, 'track');
+    if (draft.task) setSeg('seg-task', draft.task, 'task');
+    state.transcribed = false;   // 恢复的草稿不是刚转写出来的，照片也没了
+    state.confirmed = false;
+    updateCountBar();
+    updateGradeGate();
+    banner('已恢复上次没提交完的草稿（作文和题面都还在）。', 'info');
+  } catch { /* 草稿损坏：丢掉重来 */ }
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.setItem(LAST_GRADED_KEY, String(Date.now()));
+  } catch {}
+}
+
+/* ---------- 分段选择 / 字数条 ---------- */function bindSeg(id, key) {
   $(id).querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
     $(id).querySelectorAll('button').forEach((x) => x.classList.remove('on'));
     b.classList.add('on');
@@ -179,6 +225,7 @@ function setSeg(id, value, key) {
   $(id).querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.v === value));
   state[key] = value;
   updateCountBar();
+  scheduleDraft();
 }
 // —— 科目/题型识别落点：把识别结果写进分段选择并展示依据。识别只是预填，用户随时可点改。
 function applyDetectResult({ task, track, evidence }) {
@@ -1284,6 +1331,7 @@ async function runPipeline() {
       model: state.settings?.model || '',
     });
     renderHistory();
+    clearDraft();   // 批改成功了，草稿已消费
   } catch (e) {
     banner('批改失败：' + e.message, 'bad');
   } finally {
@@ -1377,3 +1425,11 @@ init().catch((e) => {
 refreshFreeQuota();
 // e2e 调试钩子：只读暴露内部状态（不参与业务逻辑）
 window.__dg = { state, crop };
+
+// Service Worker：把网页变成可安装的 App 壳（离线能打开、本地历史可见）
+// Capacitor 的安卓壳不用它（WebView 已经有本地资源，反而多一层缓存风险）
+if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.()) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}

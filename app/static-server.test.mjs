@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { resolveSafePath, hostAllowed, ALLOW_DIRS } = require('./static-server.cjs');
+const { resolveSafePath, hostAllowed, DEV_ALLOW_DIRS, PACKAGED_ROOT_FILES } = require('./static-server.cjs');
 
 let failed = 0;
 const ok = (name, cond, extra) => {
@@ -21,9 +21,21 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const p = (rel) => resolveSafePath(ROOT, rel);
 
 console.log('白名单：只暴露 app/ 与 skill/');
-ok('白名单内容正确', JSON.stringify(ALLOW_DIRS) === JSON.stringify(['app', 'skill']), ALLOW_DIRS.join(','));
+ok('白名单内容正确', JSON.stringify(DEV_ALLOW_DIRS) === JSON.stringify(['app', 'skill']), DEV_ALLOW_DIRS.join(','));
 ok('app/ 可读', !!p('/app/index.html'));
 ok('skill/ 可读（页面用 ../skill/… 相对路径加载评分规则）', !!p('/skill/kaoyan-essay/SKILL.md'));
+ok('开发态不放行根级文件', p('/index.html') === null);
+
+console.log('打包态白名单（页面文件直接在服务根上）');
+{
+  const opts = { allowDirs: ['skill'], rootFiles: PACKAGED_ROOT_FILES };
+  ok('放行根级页面文件 index.html', !!resolveSafePath(ROOT, '/index.html', opts));
+  ok('放行根级页面文件 ui.js', !!resolveSafePath(ROOT, '/ui.js', opts));
+  ok('放行根级 sw.js', !!resolveSafePath(ROOT, '/sw.js', opts));
+  ok('清单外的根文件被拒（README.md）', resolveSafePath(ROOT, '/README.md', opts) === null);
+  ok('打包态仍放行 skill/ 子树', !!resolveSafePath(ROOT, '/skill/kaoyan-essay/SKILL.md', opts));
+  ok('打包态仍拒 .git/', resolveSafePath(ROOT, '/.git/config', opts) === null);
+}
 
 console.log('敏感目录不可读');
 ok('.git/ 被拒', p('/.git/config') === null);

@@ -36,10 +36,13 @@
 
 效果有数：同一篇作文 3 轮双评**档位零波动**；12 颗预植错误的句级查全率 **100%**、误报 **0**；35 处逐句批改人工审计**把对的改错 = 0**。全部实验记录公开在 [`docs/validation/`](docs/validation/)，失败照报。
 
-## 四种用法
+## 五种用法
 
 **🌐 网页 / 手机（推荐，零安装）**
-打开 [duograder.pages.dev/app](https://duograder.pages.dev/app/) → 设置里选供应商、贴上 API Key → 点「试一下」，四项全绿就自动保存 → 拍照或拖入作文 → 核对 AI 转写 → 双评。手机浏览器打开后"添加到主屏幕"即是全屏 App。
+打开 [duograder.pages.dev/app](https://duograder.pages.dev/app/) → 设置里选供应商、贴上 API Key → 点「试一下」，四项全绿就自动保存 → 拍照或拖入作文 → 核对 AI 转写 → 双评。
+
+**📱 PWA（手机上像原生 App）**
+在手机浏览器打开上面的链接 →「添加到主屏幕」。独立图标、独立窗口、无地址栏，**断网也能打开**（应用壳与历史记录本地可看，批改当然要联网）。已带 service worker，离线降级有明确提示。
 
 **📦 安卓 App**
 直接下载 [最新版 APK](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)（安装需允许未知来源）。原生壳为 Capacitor，源码在本仓 `android/`；推送 `app/` 或 `android/` 变更后 CI（apk.yml）自动构建，也可 GitHub 页面手动触发。无跨域限制，任意供应商可直连。
@@ -48,9 +51,13 @@
 ```bash
 cd app && npm ci && npm start
 ```
-自用本地应用：内置静态服务器 + 放开渲染进程跨域限制，**任意供应商 API 都能直连**（不用再装浏览器 CORS 插件）。本地服务器只暴露 `app/` 与 `skill/` 两个子树，仓库里的 `.git/`、`data/`（你的批改记录）都在射程之外。
+自用本地应用：内置静态服务器 + 放开渲染进程跨域限制，**任意供应商 API 都能直连**（不用再装浏览器 CORS 插件）。本地服务器只暴露页面与 `skill/`，仓库里的 `.git/`、`data/`（你的批改记录）都在射程之外。
+
+想打包成免安装 exe：`cd app && npm run dist`（需先跑一次 `python scripts/sync_app.py` 生成 `app/skill/` 构建副本）。推 `v*` 标签时 CI（desktop.yml）会自动出便携版并挂到 Release。
 
 **🤖 [Agent Skill](#-agent-skill)**
+
+> **草稿兜底**：一次批改要跑 2-3 分钟。手机锁屏、切后台、浏览器回收标签页都可能让页面重载，作文在 DOM 里，重载即消失——所以输入的作文与题面会**自动存一份本地草稿**，下次打开自动恢复；批改成功后草稿自动清除。
 
 ## API 设置怎么填（新手向）
 
@@ -143,15 +150,15 @@ git clone https://github.com/5777-wq/duograder.git
 | 5 | 句级种子查全率 | 预植错误检出 | ✅ 内核 v1.0 92% → v1.3 **100%**，误报 0（[记录](docs/validation/kernel-eval-20261009/SUMMARY.md)） |
 | 6 | 跨档位覆盖 | 英一 20 分档 / 小作文 10 分档 | ✅ 分值表、档位区间、格式检测均正确（[报告](docs/validation/coverage-20261009/SUMMARY.md)） |
 
-### 工程回归（CI 每次 push 跑，133 项断言）
+### 工程回归（CI 每次 push 跑，150 项断言）
 
 | 套件 | 断言 | 守住什么 |
 |---|---|---|
-| `node app/test.mjs` | 67 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别 |
+| `node app/test.mjs` | 77 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别、草稿恢复判定 |
 | `node proxy/proxy-core.test.mjs` | 28 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、IPv6 归并、限速表不无界增长 |
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
-| `node app/static-server.test.mjs` | 20 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding |
-| `python scripts/sync_app.py --check` | — | 副本与真源无漂移 |
+| `node app/static-server.test.mjs` | 27 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding、开发态/打包态白名单各放该放的 |
+| `python scripts/sync_app.py --check` | — | 副本与真源无漂移（代理内核 + 桌面壳的 `app/skill/`） |
 
 > 「同口径」不是口号，是 CI 里可执行的断言。历史上 JS 与 Python 曾悄悄漂移三处（维度比较、`consistency.dimension_sum`、必填字段），导致同一份报告在网页端通过、在 Skill 端被打回——现在这类漂移会直接让 CI 变红。
 
@@ -224,6 +231,18 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 - **匿名免费额度的计数基于 KV**，KV 是最终一致的，跨 isolate 的并发理论上存在竞争窗口——已用 isolate 内串行化 + 全站每日 300 次上限双重兜底，但不是强一致计数。
 - **JS 与 Python 是同一套内核的两份实现**。已用 CI 断言同口径，但改一边忘了另一边仍可能发生（CI 会红，别忽略）。
 - Agent Skill 在不支持 subagent 的宿主上会退化为单上下文双评，独立性弱于标准流程。
+- **PWA 离线只覆盖应用壳**：离线能打开界面、看本地历史，但评分规则（`/skill/…`）不在 service worker 的作用域内，批改必须联网。
+- **草稿只存文本**：转写出来的照片是 base64，塞不进 localStorage，所以页面被重载后要重新拍照——但已转写出的文字会恢复。
+
+## 接下来可以做的
+
+按「对考研学生的实际价值」排序，不含插件适配：
+
+1. **报告导出与分享**——把终裁报告导出成 Markdown / 图片，方便存档、发给研友互批。现在历史抽屉里只能看。
+2. **安卓壳的版本提示**——APK 要手动从 Release 下载，网页版却是即时的。APK 用户不知道有没有新版，加个「检测到新版本」的提示能省掉一半重复反馈。
+3. **批量批改**——一次传多篇（比如整个考研班的作文）排队跑，复用同一套双评内核，边际成本几乎为零。
+4. **阶段结果持久化**——现在草稿只存输入。双评跑到一半网络断了，A 的报告得重跑；把每阶段的报告也落盘，断点续跑能省一次钱。
+5. **人工锚点校准**——把 rubric 的绝对档位对上人工专家分（锚点样文 / pairwise 排序），解决"准欠校准"这条。
 
 ## 致谢
 

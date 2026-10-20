@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
 PROXY = ROOT / "proxy"
 
-APP_FILES = ["index.html", "ui.js", "core.js", "style.css", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
+APP_FILES = ["index.html", "ui.js", "core.js", "style.css", "sw.js", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
 # capacitor 运行时文件：同步 assets 时必须保留，不能当作过期副本删掉
 CAP_RUNTIME = {"cordova.js", "cordova_plugins.js", "capacitor.config.json", "capacitor.plugins.json"}
 
@@ -45,6 +45,10 @@ PROXY_COPIES = [
     (PROXY / "proxy-core.js", ROOT / "functions" / "v1" / "_proxy-core.js"),
     (PROXY / "proxy-core.js", ROOT / "workers" / "invite-proxy" / "_proxy-core.js"),
 ]
+
+# 桌面壳（Electron）打包需要 skill/ 进包：electron-builder 的 files 不能跨出 app/，
+# 所以在 app/ 下放一份构建期副本（真源仍是仓库根的 skill/）。
+DESKTOP_SKILL = ROOT / "app" / "skill"
 
 CHECK_ONLY = "--check" in sys.argv
 
@@ -67,6 +71,36 @@ def check_proxy_copies() -> list:
         elif not _same(src, dst):
             drift.append(f"副本与真源不一致: {dst.relative_to(ROOT)}")
     return drift
+
+
+def check_desktop_skill() -> list:
+    """app/skill/ 与真源 skill/ 的漂移清单。"""
+    src = ROOT / "skill"
+    if not src.exists():
+        return ["真源缺失: skill/"]
+    if not DESKTOP_SKILL.exists():
+        return ["app/skill/ 缺失（桌面壳打包需要）"]
+    drift = []
+
+    def walk(c):
+        if c.left_only:
+            drift.append(f"app/skill/ 缺少: {c.left_only}")
+        if c.right_only:
+            drift.append(f"app/skill/ 多余: {c.right_only}")
+        if c.diff_files:
+            drift.append(f"app/skill/ 内容不一致: {c.diff_files}")
+        for sub in c.subdirs.values():
+            walk(sub)
+
+    walk(filecmp.dircmp(src, DESKTOP_SKILL))
+    return drift
+
+
+def sync_desktop_skill():
+    if DESKTOP_SKILL.exists():
+        shutil.rmtree(DESKTOP_SKILL)
+    shutil.copytree(ROOT / "skill", DESKTOP_SKILL)
+    print("✓ app/skill/ 已同步（桌面壳打包用）")
 
 
 def copy_app_files(dest: Path):
@@ -141,19 +175,20 @@ def main():
         sys.exit("找不到 proxy/ 真源目录")
 
     if CHECK_ONLY:
-        drift = check_proxy_copies()
+        drift = check_proxy_copies() + check_desktop_skill()
         if drift:
             for d in drift:
                 print(f"[失败] {d}")
-            print(f"代理内核副本漂移 {len(drift)} 处：跑 `python scripts/sync_app.py` 对齐")
+            print(f"副本漂移 {len(drift)} 处：跑 `python scripts/sync_app.py` 对齐")
             sys.exit(1)
-        print("代理内核副本与真源一致（无漂移）")
+        print("副本与真源一致（无漂移）")
         return
 
     sync_pages_dist()
     sync_www(ROOT / "www", "www（Capacitor webDir）")
     sync_apk_assets()
     sync_proxy_copies()
+    sync_desktop_skill()
     print("全部副本已与真源对齐。提交后 CI（apk.yml）自动构建 APK。")
 
 

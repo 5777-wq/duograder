@@ -3,6 +3,8 @@ app/android/
 app/www/
 app/node_modules/
 app/icons-gen/
+# 桌面壳打包用：skill/ 的构建期副本（真源在仓库根 skill/，由 sync_app.py 同步）
+app/skill/
 
 # 数据与密钥
 node_modules/

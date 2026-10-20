@@ -1,6 +1,6 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
-import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched } from './core.js';
+import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched, buildDraft, draftIsRestorable } from './core.js';
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -154,6 +154,21 @@ console.log('Key 识别（贴 Key 自动认供应商）');
   ok('Key 与所选供应商相符时不误报', keyLooksMismatched('deepseek', 'sk-' + 'a'.repeat(32)) === null);
   ok('没设格式规则的供应商不误报', keyLooksMismatched('qwen', 'sk-随便什么') === null);
   ok('空 Key 不提示', keyLooksMismatched('deepseek', '') === null);
+}
+
+console.log('草稿（页面被重载不丢作文）');
+{
+  const d = buildDraft({ essay: 'My essay.', prompt: 'Write about the chart.', track: 'english-ii', task: 'large' });
+  ok('草稿带时间戳', typeof d.ts === 'number' && d.ts > 0);
+  ok('草稿存下作文与题面', d.essay === 'My essay.' && d.prompt === 'Write about the chart.');
+  ok('草稿存下科目与题型', d.track === 'english-ii' && d.task === 'large');
+  ok('新草稿可恢复', draftIsRestorable(d, 0) === true);
+  ok('比上次批改更早的草稿不恢复', draftIsRestorable({ ...d, ts: 100 }, 200) === false);
+  ok('比上次批改更晚的草稿才恢复', draftIsRestorable({ ...d, ts: 300 }, 200) === true);
+  ok('空作文空题面不恢复', draftIsRestorable(buildDraft({ essay: '   ', prompt: '' }), 0) === false);
+  ok('没有草稿不恢复', draftIsRestorable(null, 0) === false);
+  ok('损坏的草稿不恢复', draftIsRestorable('x', 0) === false);
+  ok('undefined 不炸', draftIsRestorable(undefined, 0) === false);
 }
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');
