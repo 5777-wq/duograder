@@ -15,17 +15,13 @@
 
 **🌐 [在线使用 · 无需安装](https://duograder.pages.dev/app/)**　|　📦 [安卓 App](https://github.com/5777-wq/duograder/releases/latest/download/DuoGrader.apk)　|　🤖 [Agent Skill](#-agent-skill)
 
-![真实批改报告](docs/assets/report-preview.png)
-
-*一次真实批改的终裁报告：双评过程、维度拆解、三级逐句批改、可执行训练建议*
-
 </div>
 
 ---
 
-## 目录
+<img src="docs/assets/report-preview.png" width="520" alt="终裁报告：双评汇聚尺 + 维度拆解">
 
-[为什么是「双评」](#为什么是双评) · [五种用法](#五种用法) · [API 设置怎么填](#api-设置怎么填新手向) · [Agent Skill](#-agent-skill) · [工作原理](#工作原理) · [成绩曲线](#成绩曲线看得见的进步) · [核心资产](#核心资产) · [架构与工程约定](#架构与工程约定) · [验证](#验证) · [开发与部署](#开发与部署) · [共享算力](#共享算力可选自托管) · [隐私](#隐私) · [已知局限](#已知局限) · [接下来可以做的](#接下来可以做的)
+<div align="center"><sub>一次真实批改的终裁报告——上面那道尺子就是本产品的全部：两个互不可见的阅卷员，和它们汇成的那一个分数。</sub></div>
 
 ---
 
@@ -41,6 +37,18 @@
 | 报告自相矛盾无人发现 | **机器校验**：维度分之和必须落在档位区间内，不达标自动打回重评 |
 
 效果有数：同一篇作文 3 轮双评**档位零波动**；12 颗预植错误的句级查全率 **100%**、误报 **0**；35 处逐句批改人工审计**把对的改错 = 0**。全部实验记录公开在 [`docs/validation/`](docs/validation/)，失败照报。
+
+---
+
+## 三十秒上手
+
+| 你是什么情况 | 走哪条路 |
+|---|---|
+| 不想折腾任何配置 | 打开网页直接用——每 IP 赠 50 次免费批改，不用登录 |
+| 手里有 API Key | 设置里选供应商 → 贴 Key → 点「试一下」，四项全绿自动保存 |
+| 作文不想出电脑 | 装 Ollama 或 LM Studio，Key 留空，本地模型直连 |
+| 要在电脑上批量用 | 桌面壳：任意供应商都能直连，不用装浏览器 CORS 插件 |
+| 想让 AI 帮你批 | 装成 Agent Skill（Codex / Claude Code / ZCode），内核宿主无关 |
 
 ---
 
@@ -70,6 +78,8 @@ cd app && npm ci && npm start
 ---
 
 ## API 设置怎么填（新手向）
+
+<img src="docs/assets/settings-preview.png" width="480" alt="API 设置：三步配置">
 
 设置弹窗的主流程只有三步，模型名和地址这些容易劝退人的字段都收进了「高级设置」：
 
@@ -143,6 +153,8 @@ git clone https://github.com/5777-wq/duograder.git
 
 ## 成绩曲线：看得见的进步
 
+<img src="docs/assets/history-preview.png" width="330" alt="历史抽屉里的成绩曲线">
+
 打开右上角「历史」抽屉，第一屏就是成绩曲线：
 
 - **纵轴是得分率（得分 ÷ 该题型满分）**——英一大作文 20 分、英二大作文 15 分、小作文 10 分，原始分没法画在一条线上，折算成百分比才看得出是涨还是跌。
@@ -154,6 +166,64 @@ git clone https://github.com/5777-wq/duograder.git
 
 - **单条删除**：点「删除」会变成「确认删除」，4 秒内再点一次才真删——误删一篇批改好的作文赔不起。
 - **清空全部**：抽屉底部有「清空全部历史」，同样两步确认。
+
+---
+
+## 共享算力（可选，自托管）
+
+想给同学/学生免配置直接用？附赠一个代理，两套等价部署：
+
+- `functions/v1/` —— **Cloudflare Pages Functions**（主路径，与网页同域 `duograder.pages.dev/v1`，国内可直连）
+- `workers/invite-proxy/` —— **Cloudflare Worker**（备用路径，海外 / 自托管参考）
+
+两者共用同一份实现 `proxy/proxy-core.js`（真源），副本由 `scripts/sync_app.py` 同步，CI 断言二者与真源逐字节一致——历史上这两套曾经漂移过一次（Worker 缺匿名通道、免费额度与配额查询，Pages 缺 IPv6 归并）。
+
+| 方式 | 怎么用 | 额度 |
+|---|---|---|
+| **邀请码** | 点右上角「登录」输入邀请码 | 不限次 |
+| **匿名免费** | 什么都不填，直接用 | 每 IP + 设备指纹共 50 次（180 天） |
+
+匿名免费额度需要 KV 计数绑定（`FREE_KV`）。本仓的 `wrangler.toml` 里已绑好；自建部署时 `wrangler kv namespace create FREE_KV` 后把返回的 id 填进 `[[kv_namespaces]]`。**没绑时只有邀请码模式可用。**
+
+### 安全设计
+
+- **API Key 只存服务端加密 secret**，前端和仓库里永远只有一个邀请码占位
+- **上游地址写死**，客户端无法指定目标；**不转发客户端原始头**，逐个重建
+- **模型白名单**：客户端不能借你的 key 调用任意模型
+- **max_tokens 封顶**（匿名 12k / 邀请码 32k）：限制单次成本，防止免费额度被拿去跑无上限生成
+- **配额先扣后调，上游失败退额**：并发请求不会同时越过配额检查
+- **每 IP 限速** 120 次 / 10 分钟（实例内存滑动窗口，是第一道闸不是精确计量）；IPv6 按 /64 前缀归并
+- **CORS 白名单**只放行本应用来源（`ALLOWED_ORIGINS` 可配，支持 `*.example.com` 通配，按域分量匹配）
+- **不落作文数据**：代理纯转发，只有计数进 KV
+
+### 自托管四步
+
+```bash
+python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
+wrangler pages secret put MINIMAX_API_KEY
+wrangler pages secret put INVITE_CODE
+wrangler pages deploy
+```
+
+> **为什么输出目录是 `.pages-dist` 而不是仓库根**：仓库根里还有 `data/`（你的批改记录）、`node_modules/`、`android/`。整根发布会把它们一并暴露到公网，所以 `wrangler.toml` 的 `pages_build_output_dir` 指向 `.pages-dist`。
+
+---
+
+## 隐私
+
+**分两种情况，说清楚：**
+
+**① 你自带 API Key（默认）**
+Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorage / IndexedDB）。请求**直发你自己配置的供应商**，不经过任何 DuoGrader 服务器。仓库与线上实例都不参与。
+
+**② 邀请码 / 匿名免费额度（走共享算力）**
+请求会经过 `duograder.pages.dev` 的 Pages Function（或自建的 Worker）再转发给模型供应商——**作文内容会经过这个代理**。代理**不存储作文内容**（纯转发），但会写三类计数到 KV：每 IP 的免费次数、每设备指纹的免费次数、全站当天的匿名总次数。限速窗口是实例内存里的滑动窗口，不落盘。
+
+设备指纹只在内置算力通道生成并发送（存 localStorage，清浏览器数据才会变）；**你自带 Key 直连第三方时不会发送**。
+
+> 仓库与线上实例**有**后端（就是上面这个转发代理）。它只做转发与计数，不落作文、不做统计上报、不回传任何数据。
+
+---
 
 ## 核心资产
 
@@ -175,7 +245,7 @@ git clone https://github.com/5777-wq/duograder.git
 
 | 位置 | 是什么 |
 |---|---|
-| [`app/core.js`](app/core.js) | 同一套内核的浏览器实现（纯函数，ESM，Node 也能加载）+ 成绩曲线计算与 SVG 绘制 |
+| [`app/core.js`](app/core.js) | 同一套内核的浏览器实现（纯函数，ESM，Node 也能加载）+ 报告模板 + 汇聚尺 + 成绩曲线 |
 | [`app/ui.js`](app/ui.js) | 编排层：预检 → 双盲 → 校验 → 合并/仲裁 → 渲染 → 历史归档 |
 | [`app/style.css`](app/style.css) | 瑞士国际主义视觉系统（网格 / 无衬线 / 单强调色 / 圆角 0） |
 | [`app/sw.js`](app/sw.js) | Service Worker：网络优先 + 离线回落，把网页变成可安装的 App 壳 |
@@ -190,6 +260,7 @@ git clone https://github.com/5777-wq/duograder.git
 | [`functions/v1/`](functions/v1/) | Pages Functions 入口（主路径，与网页同域，国内可直连） |
 | [`workers/invite-proxy/`](workers/invite-proxy/) | Cloudflare Worker 入口（备用路径，海外 / 自托管） |
 | [`scripts/sync_app.py`](scripts/sync_app.py) | 单一真源同步：app/ → 三份副本、proxy/ → 两份副本，兼漂移检查 |
+| [`scripts/preview_shots.mjs`](scripts/preview_shots.mjs) | 用真实 index.html + style.css + core.js 生成 README 界面截图 |
 
 ---
 
@@ -218,6 +289,9 @@ git clone https://github.com/5777-wq/duograder.git
 **⑦ 失败必须让用户看见**
 初始化失败会直接在页头横幅报出来，不留一个"所有按钮都没反应"的死页面；诊断的每一项失败都带"怎么办"。
 
+**⑧ 文档不能漂移**
+`scripts/check_readme.mjs` 在 CI 里校验：README 里每个本地路径真实存在、每个目录锚点对得上标题、每个断言数与实际跑出来的一致。以后文档过期会直接让 CI 变红。
+
 ---
 
 ## 验证
@@ -242,6 +316,7 @@ git clone https://github.com/5777-wq/duograder.git
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
 | `node app/static-server.test.mjs` | 27 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding、开发态/打包态白名单各放该放的 |
 | `python scripts/sync_app.py --check` | 1 项检查 | 副本与真源无漂移（代理内核 + 桌面壳的 `app/skill/`） |
+| `node scripts/check_readme.mjs` | 4 类检查 | README 的路径 / 锚点 / 断言数与仓库一致 |
 
 > 「同口径」不是口号，是 CI 里可执行的断言。
 
@@ -268,6 +343,8 @@ node app/test.mjs                     # 应用层回归
 node proxy/proxy-core.test.mjs         # 代理内核回归
 node app/parity.mjs                   # JS / Python 跨实现一致性
 node app/static-server.test.mjs       # 桌面壳静态服务器回归
+node scripts/check_readme.mjs         # README 自检
+node scripts/preview_shots.mjs        # 重新生成 README 用的界面截图页
 cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task large <作文.txt>
 ```
 
@@ -275,7 +352,7 @@ cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task la
 
 | 流水线 | 触发 | 产出 |
 |---|---|---|
-| `ci.yml` | 每次 push / PR | 150 项断言 + 副本漂移检查 + 评分脚本冒烟 |
+| `ci.yml` | 每次 push / PR | 173 项断言 + 副本漂移检查 + README 自检 + 评分脚本冒烟 |
 | `apk.yml` | `app/` `android/` `skill/` 变更 | 安卓 APK（artifact） |
 | `desktop.yml` | push 到 main / 打 `v*` 标签 | Windows 便携版 exe；标签推送时挂到 Release |
 
@@ -289,55 +366,6 @@ wrangler pages deploy
 ```
 
 > **为什么输出目录是 `.pages-dist` 而不是仓库根**：仓库根里还有 `data/`（你的批改记录）、`node_modules/`、`android/`。整根发布会把它们一并暴露到公网，所以 `wrangler.toml` 的 `pages_build_output_dir` 指向 `.pages-dist`。
-
----
-
-## 共享算力（可选，自托管）
-
-想给同学/学生免配置直接用？附赠一个代理，两套等价部署：
-
-- `functions/v1/` —— **Cloudflare Pages Functions**（主路径，与网页同域 `duograder.pages.dev/v1`，国内可直连）
-- `workers/invite-proxy/` —— **Cloudflare Worker**（备用路径，海外 / 自托管参考）
-
-两者共用同一份实现 `proxy/proxy-core.js`（真源），副本由 `scripts/sync_app.py` 同步，CI 断言二者与真源逐字节一致——历史上这两套曾经漂移过一次（Worker 缺匿名通道、免费额度与配额查询，Pages 缺 IPv6 归并）。
-
-### 两种访问方式
-
-| 方式 | 怎么用 | 额度 |
-|---|---|---|
-| **邀请码** | 点右上角「登录」输入邀请码 | 不限次 |
-| **匿名免费** | 什么都不填，直接用 | 每 IP + 设备指纹共 50 次（180 天） |
-
-匿名免费额度需要 KV 计数绑定（`FREE_KV`）。本仓的 `wrangler.toml` 里已绑好；自建部署时 `wrangler kv namespace create FREE_KV` 后把返回的 id 填进 `[[kv_namespaces]]`。**没绑时只有邀请码模式可用。**
-
-### 安全设计
-
-- **API Key 只存服务端加密 secret**，前端和仓库里永远只有一个邀请码占位
-- **上游地址写死**，客户端无法指定目标；**不转发客户端原始头**，逐个重建
-- **模型白名单**：客户端不能借你的 key 调用任意模型
-- **max_tokens 封顶**（匿名 12k / 邀请码 32k）：限制单次成本，防止免费额度被拿去跑无上限生成
-- **配额先扣后调，上游失败退额**：并发请求不会同时越过配额检查
-- **每 IP 限速** 120 次 / 10 分钟（实例内存滑动窗口，是第一道闸不是精确计量）；IPv6 按 /64 前缀归并
-- **CORS 白名单**只放行本应用来源（`ALLOWED_ORIGINS` 可配，支持 `*.example.com` 通配，按域分量匹配）
-- **不落作文数据**：代理纯转发，只有计数进 KV
-
-代码里的代理地址是演示实例；自己部署后，在 `app/core.js` 的 `PRESETS` 里改一行 `baseURL` 即可。
-
----
-
-## 隐私
-
-**分两种情况，说清楚：**
-
-**① 你自带 API Key（默认）**
-Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorage / IndexedDB）。请求**直发你自己配置的供应商**，不经过任何 DuoGrader 服务器。仓库与线上实例都不参与。
-
-**② 邀请码 / 匿名免费额度（走共享算力）**
-请求会经过 `duograder.pages.dev` 的 Pages Function（或自建的 Worker）再转发给模型供应商——**作文内容会经过这个代理**。代理**不存储作文内容**（纯转发），但会写三类计数到 KV：每 IP 的免费次数、每设备指纹的免费次数、全站当天的匿名总次数。限速窗口是实例内存里的滑动窗口，不落盘。
-
-设备指纹只在内置算力通道生成并发送（存 localStorage，清浏览器数据才会变）；**你自带 Key 直连第三方时不会发送**。
-
-> 仓库与线上实例**有**后端（就是上面这个转发代理）。它只做转发与计数，不落作文、不做统计上报、不回传任何数据。
 
 ---
 

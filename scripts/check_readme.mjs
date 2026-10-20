@@ -37,6 +37,8 @@ const mustMention = [
   'skill/kaoyan-essay/prompts/', 'skill/kaoyan-essay/references/past-prompts-index.md',
   'skill/kaoyan-essay/scripts/', 'skill/kaoyan-essay/tests/fixtures/',
   'docs/validation/', 'docs/assets/logo.svg', 'docs/assets/report-preview.png',
+  'docs/assets/settings-preview.png', 'docs/assets/history-preview.png',
+  'scripts/preview_shots.mjs',
 ];
 for (const m of mustMention) ok(`提到 ${m}`, md.includes(m));
 

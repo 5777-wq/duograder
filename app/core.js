@@ -360,6 +360,87 @@ export function renderScoreChart(curve) {
   return { svg, empty: false };
 }
 
+// —— 报告渲染（纯函数）——
+// 放在 core.js 而不是 ui.js，是为了让报告模板能在 Node 里被渲染出来：
+// README 的界面截图、以及将来的"导出 Markdown"都用这一份代码，不会出现两套渲染慢慢分叉。
+export const TRACKS = { 'english-i': '英语一', 'english-ii': '英语二' };
+export const TASKS = { large: '大作文 Part B', small: '小作文 Part A' };
+// 级别中英兼容显示（内核 v1.4 起为中文；旧历史记录是英文枚举）
+export const SEV_DISP = { '错误': '错误', '欠佳': '欠佳', '润色': '润色', error: '错误', awkward: '欠佳', style: '润色' };
+export const SEV_CLS = { '错误': 'error', '欠佳': 'awkward', '润色': 'style', error: 'error', awkward: 'awkward', style: 'style' };
+export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+export function renderReportHtml(final, facts, opts = {}) {
+  const track = final?.report_a?.meta?.exam_track || opts.track || 'english-ii';
+  const task = final?.report_a?.meta?.task || opts.task || 'large';
+  const maxScore = MAX_SCORES[`${track}_${task}`] || 15;
+  const [ia, ib] = final?.initial || [];
+  const dims = final?.dimensions || [];
+  const edits = final?.report_b?.sentence_edits || final?.report_a?.sentence_edits || [];
+  const rep = final?.decision === 'pick_b' ? final?.report_b : final?.report_a;
+  const flags = facts?.mechanical_flags || [];
+  const modelLabel = final?.report_a?.meta?.grader_model || opts.model || '';
+
+  return `
+  <section class="card">
+    <h2><span class="dot"></span>终裁报告</h2>
+    <div class="score-hero">
+      <div class="score-big">${esc(final?.final_score)}<small> / ${maxScore}</small></div>
+      <div class="score-meta">
+        <span>科目题型</span><b>${TRACKS[track] || track} · ${TASKS[task] || task}</b>
+        <span>档位</span><b>第 ${esc(final?.final_band)} 档（${esc(String(final?.final_range || ''))}）</b>
+        <span>字数</span><b>${esc(String(facts?.word_count ?? '?'))} 词（预检脚本）</b>
+        ${modelLabel ? `<span>阅卷模型</span><b>${esc(modelLabel)}</b>` : ''}
+      </div>
+    </div>
+    ${dualRail(final || {}, maxScore, ia, ib)}
+    ${flags.length ? flags.map((f) => `<div class="flag-line">预检 · ${esc(f.detail)}（${f.count} 处）</div>`).join('') : ''}
+    <table class="rep"><thead><tr><th style="width:32%">维度</th><th>分值</th><th>得分</th><th style="width:44%">扣分依据</th></tr></thead>
+      <tbody>${dims.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${esc(String(d.max))}</td><td class="num" style="color:var(--accent-deep)">${esc(String(d.score))}</td><td>${esc(d.note || d.deduction_reason || '')}</td></tr>`).join('')}</tbody></table>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span>逐句批改（${edits.length} 处）</h2>
+    <table class="rep"><thead><tr><th style="width:42%">原句</th><th>级别</th><th style="width:42%">修改与说明</th></tr></thead>
+      <tbody>${edits.map((e) => `<tr>
+        <td class="en">${esc(e.original)}</td>
+        <td><span class="chip ${esc(SEV_CLS[e.severity] || 'style')}">${esc(SEV_DISP[e.severity] || e.severity)}</span></td>
+        <td>${esc(e.revised)}<div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(e.issue)}</div></td>
+      </tr>`).join('') || '<tr><td colspan="3">未发现需要修改的句子</td></tr>'}</tbody></table>
+    <div class="hint" style="margin-top:8px">级别说明：<b>错误</b>＝硬伤，考试会扣分 · <b>欠佳</b>＝不算错但不地道，不直接扣分 · <b>润色</b>＝原句无错，仅供参考</div>
+  </section>
+
+  <section class="card">
+    <h2><span class="dot"></span>修改后版本（保留你的立意）</h2>
+    <div class="essay-box">${esc(rep?.improved_version || '—')}</div>
+    ${(rep?.top_problems || []).length ? `<h2 style="margin-top:20px"><span class="dot"></span>最限制得分的问题</h2>
+    <ul class="problems">${rep.top_problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${rep?.practice_advice ? `<div class="advice">🎯 ${esc(rep.practice_advice)}</div>` : ''}
+    ${(rep?.reusable?.patterns || rep?.reusable?.words) ? `<h2 style="margin-top:20px"><span class="dot"></span>可复用</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+        ${(rep.reusable.patterns || []).map((p) => `<span class="chip style">${esc(p)}</span>`).join('')}
+        ${(rep.reusable.words || []).map((w) => `<span class="chip awkward">${esc(w)}</span>`).join('')}
+      </div>` : ''}
+  </section>`;
+}
+
+// 供应商信息（纯函数）：设置面板渲染与截图工具共用同一份逻辑，避免两处各写一遍字符串
+export function provInfo(id) {
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) return null;
+  return {
+    id: p.id,
+    name: p.name,
+    status: p.status,
+    statusLabel: p.status ? STATUS_LABEL[p.status] : '',
+    statusClass: { ok: 'ok', blocked: 'bad', local: 'mut' }[p.status] || 'mut',
+    blurb: p.blurb || '',
+    note: p.note || '',
+    keyUrl: p.keyUrl || '',
+    keyLabel: p.keyUrl ? `去 ${p.name.replace(/ 官方| · 内置算力| 本地/g, '')} 控制台申请 Key →` : '',
+  };
+}
+
 export function validateReport(report, essayText) {
   const failures = [], warnings = [];
   const essayNorm = essayText.trim().split(/\s+/).join(' ');

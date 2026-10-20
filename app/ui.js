@@ -6,12 +6,10 @@ import {
   detectProviderByKey, keyLooksMismatched,
   DRAFT_KEY, LAST_GRADED_KEY, buildDraft, draftIsRestorable,
   buildScoreCurve, renderScoreChart, MAX_SCORES,
+  esc, TRACKS, TASKS, renderReportHtml, provInfo,
 } from './core.js';
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const TRACKS = { 'english-i': '英语一', 'english-ii': '英语二' };
-const TASKS = { large: '大作文 Part B', small: '小作文 Part A' };
 const LENGTH_HINT = {
   ok: ['达标', 'ok'], soft_ok: ['基本达标', 'ok'], soft_short: ['略短（不罚分，建议补足）', 'soft'],
   short_two_thirds: ['字数不足 2/3（任务完成分减半，封顶第三档）', 'bad'],
@@ -375,40 +373,42 @@ function setAdvanced(show) {
 }
 
 /* ---------- 供应商选择器：说清"选哪个"和"去哪儿拿 Key" ---------- */
-const STATUS_CLASS = { ok: 'ok', blocked: 'bad', local: 'mut' };
 
 function renderProvList(currentId) {
   // 邀请码不在这里：它是"登录"模式（右上角登录 / 不想折腾那条路径），不是可配置的 BYOK 供应商
-  $('prov-list').innerHTML = PRESETS.filter((p) => p.id !== 'invite').map((p) => `
+  $('prov-list').innerHTML = PRESETS.filter((p) => p.id !== 'invite').map((p) => {
+    const info = provInfo(p.id);
+    return `
     <button type="button" class="prov-row ${p.id === currentId ? 'on' : ''}" data-id="${p.id}">
       <span class="p-main">
-        <span class="p-name">${esc(p.name)}</span>
-        ${p.status ? `<span class="p-status ${STATUS_CLASS[p.status]}">${esc(STATUS_LABEL[p.status])}</span>` : ''}
+        <span class="p-name">${esc(info.name)}</span>
+        ${info.status ? `<span class="p-status ${info.statusClass}">${esc(info.statusLabel)}</span>` : ''}
       </span>
-      ${p.blurb ? `<span class="p-blurb">${esc(p.blurb)}</span>` : ''}
-      ${p.note ? `<span class="p-note">⚠ ${esc(p.note)}</span>` : ''}
-    </button>`).join('');
+      ${info.blurb ? `<span class="p-blurb">${esc(info.blurb)}</span>` : ''}
+      ${info.note ? `<span class="p-note">⚠ ${esc(info.note)}</span>` : ''}
+    </button>`;
+  }).join('');
 }
 
 // 当前供应商的说明、状态徽章、申请 Key 链接、Key 提示
 function paintProvInfo(id) {
-  const p = PRESETS.find((x) => x.id === id);
+  const p = provInfo(id);
   if (!p) return;
   $('prov-current').textContent = p.name;
   const st = $('prov-status');
   if (p.status) {
     st.hidden = false;
-    st.className = 'p-status ' + STATUS_CLASS[p.status];
-    st.textContent = STATUS_LABEL[p.status];
+    st.className = 'p-status ' + p.statusClass;
+    st.textContent = p.statusLabel;
   } else {
     st.hidden = true;
   }
-  $('prov-blurb').textContent = p.blurb || '';
+  $('prov-blurb').textContent = p.blurb;
   const link = $('key-link');
   if (p.keyUrl) {
     link.hidden = false;
     link.href = p.keyUrl;
-    link.textContent = '去 ' + p.name.replace(/ 官方| · 内置算力| 本地/g, '') + ' 控制台申请 Key →';
+    link.textContent = p.keyLabel;
   } else {
     link.hidden = true;
   }
@@ -1435,10 +1435,7 @@ async function runPipeline() {
 }
 
 /* ---------- 报告渲染 ---------- */
-// 级别中英兼容显示（内核 v1.4 起为中文；旧历史记录是英文枚举）
-const SEV_DISP = { '错误': '错误', '欠佳': '欠佳', '润色': '润色', error: '错误', awkward: '欠佳', style: '润色' };
-const SEV_CLS = { '错误': 'error', '欠佳': 'awkward', '润色': 'style', error: 'error', awkward: 'awkward', style: 'style' };
-
+// 报告模板在 core.js（纯函数）：README 的界面截图与将来的导出功能都跑同一份代码
 // 入场阶梯：按当前 DOM 顺序写 --d，不用 CSS :nth-child（插入任何兄弟节点都会让索引错位）
 function staggerCards(container, step = 60) {
   if (!container) return;
@@ -1450,57 +1447,9 @@ function staggerCards(container, step = 60) {
 // 双评汇聚尺的生成在 core.js（纯逻辑，可被单测覆盖）：见 dualRail()
 
 function renderReport(final, facts, essay) {
-  const track = final.report_a?.meta?.exam_track || state.track || 'english-ii';
-  const task = final.report_a?.meta?.task || state.task || 'large';
-  const maxScore = { 'english-i_large': 20, 'english-ii_large': 15, 'english-i_small': 10, 'english-ii_small': 10 }[`${track}_${task}`] || 15;
-  const [ia, ib] = final.initial || [];
-  const dims = final.dimensions || [];
-  const edits = final.report_b?.sentence_edits || final.report_a?.sentence_edits || [];
-  const rep = final.decision === 'pick_b' ? final.report_b : final.report_a;
-  const flags = (facts?.mechanical_flags) || [];
-  const modelLabel = final.report_a?.meta?.grader_model || state.settings?.model || '';
-
-  $('report-area').innerHTML = `
-  <section class="card">
-    <h2><span class="dot"></span>终裁报告</h2>
-    <div class="score-hero">
-      <div class="score-big">${esc(final.final_score)}<small> / ${maxScore}</small></div>
-      <div class="score-meta">
-        <span>科目题型</span><b>${TRACKS[track]} · ${TASKS[task]}</b>
-        <span>档位</span><b>第 ${esc(final.final_band)} 档（${esc(String(final.final_range || ''))}）</b>
-        <span>字数</span><b>${esc(String(facts?.word_count ?? '?'))} 词（预检脚本）</b>
-        ${modelLabel ? `<span>阅卷模型</span><b>${esc(modelLabel)}</b>` : ''}
-      </div>
-    </div>
-    ${dualRail(final, maxScore, ia, ib)}
-    ${flags.length ? flags.map((f) => `<div class="flag-line">预检 · ${esc(f.detail)}（${f.count} 处）</div>`).join('') : ''}
-    <table class="rep"><thead><tr><th style="width:32%">维度</th><th>分值</th><th>得分</th><th style="width:44%">扣分依据</th></tr></thead>
-      <tbody>${dims.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${esc(String(d.max))}</td><td class="num" style="color:var(--accent-deep)">${esc(String(d.score))}</td><td>${esc(d.note || d.deduction_reason || '')}</td></tr>`).join('')}</tbody></table>
-  </section>
-
-  <section class="card">
-    <h2><span class="dot"></span>逐句批改（${edits.length} 处）</h2>
-    <table class="rep"><thead><tr><th style="width:42%">原句</th><th>级别</th><th style="width:42%">修改与说明</th></tr></thead>
-      <tbody>${edits.map((e) => `<tr>
-        <td class="en">${esc(e.original)}</td>
-        <td><span class="chip ${esc(SEV_CLS[e.severity] || 'style')}">${esc(SEV_DISP[e.severity] || e.severity)}</span></td>
-        <td>${esc(e.revised)}<div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(e.issue)}</div></td>
-      </tr>`).join('') || '<tr><td colspan="3">未发现需要修改的句子</td></tr>'}</tbody></table>
-    <div class="hint" style="margin-top:8px">级别说明：<b>错误</b>＝硬伤，考试会扣分 · <b>欠佳</b>＝不算错但不地道，不直接扣分 · <b>润色</b>＝原句无错，仅供参考</div>
-  </section>
-
-  <section class="card">
-    <h2><span class="dot"></span>修改后版本（保留你的立意）</h2>
-    <div class="essay-box">${esc(rep?.improved_version || '—')}</div>
-    ${(rep?.top_problems || []).length ? `<h2 style="margin-top:20px"><span class="dot"></span>最限制得分的问题</h2>
-    <ul class="problems">${rep.top_problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-    ${rep?.practice_advice ? `<div class="advice">🎯 ${esc(rep.practice_advice)}</div>` : ''}
-    ${(rep?.reusable?.patterns || rep?.reusable?.words) ? `<h2 style="margin-top:20px"><span class="dot"></span>可复用</h2>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-        ${(rep.reusable.patterns || []).map((p) => `<span class="chip style">${esc(p)}</span>`).join('')}
-        ${(rep.reusable.words || []).map((w) => `<span class="chip awkward">${esc(w)}</span>`).join('')}
-      </div>` : ''}
-  </section>`;
+  $('report-area').innerHTML = renderReportHtml(final, facts, {
+    track: state.track, task: state.task, model: state.settings?.model || '',
+  });
   staggerCards($('report-area'), 70);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

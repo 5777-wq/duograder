@@ -35,3 +35,9 @@ android/app/src/main/assets/capacitor.config.json
 android/app/src/main/assets/capacitor.plugins.json
 android/app/src/main/res/xml/config.xml
 *.apk
+
+# README 界面截图页（由 scripts/preview_shots.mjs 生成，不入库；PNG 成品在 docs/assets/）
+docs/shots/
+
+# 宣传视频的中间产物（几十 MB 的素材与渲染帧，不入库）
+docs/launch-video/
