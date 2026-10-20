@@ -2,6 +2,7 @@
   "name": "duograder-app",
   "private": true,
   "version": "0.2.0",
+  "type": "module",
   "description": "DuoGrader 双评阅卷官——考研英语作文双评批改（自用桌面版）",
   "main": "electron-main.cjs",
   "scripts": {
@@ -17,6 +18,7 @@
     "productName": "DuoGrader",
     "files": [
       "electron-main.cjs",
+      "static-server.cjs",
       "icon.png",
       "index.html",
       "ui.js",

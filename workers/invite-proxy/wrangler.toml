@@ -1,10 +1,32 @@
-# DuoGrader 邀请码代理
+# DuoGrader 邀请码代理 · Cloudflare Worker
+#
+# 与 Pages Functions 版共用同一份实现（proxy/proxy-core.js，真源；本目录的 _proxy-core.js 是同步副本）。
+# 两者现在行为一致：同样的免费额度、模型白名单、max_tokens 封顶、CORS 规则。
+#
+# 部署：
+#   wrangler deploy
+#   wrangler secret put MINIMAX_API_KEY
+#   wrangler secret put INVITE_CODE
+#
 # 密钥（MINIMAX_API_KEY / INVITE_CODE）用 `wrangler secret put` 设置，绝不写进本文件。
 name = "duograder-proxy"
 main = "worker.js"
-compatibility_date = "2026-10-10"
+compatibility_date = "2026-10-20"
 
 [vars]
 UPSTREAM_BASE = "https://api.minimaxi.com/v1"
 UPSTREAM_MODEL = "MiniMax-M3.1-Flash-Preview"
 UPSTREAM_VISION_MODEL = "MiniMax-M3.1-Flash-Preview"
+# CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配）
+ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"
+FREE_LIMIT = "50"
+ANON_DAILY_CAP = "300"
+
+# ─────────────────────────────────────────────────────────────
+# 匿名免费额度的 KV 计数绑定（不配则匿名通道关闭，只走邀请码）
+#   wrangler kv namespace create FREE_KV
+# ─────────────────────────────────────────────────────────────
+# [[kv_namespaces]]
+# binding = "FREE_KV"
+# id = "在此填 namespace id"
+# preview_id = "在此填 preview namespace id"

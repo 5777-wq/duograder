@@ -1,0 +1,7 @@
+{
+  "name": "duograder-proxy-core",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "DuoGrader 共享代理内核（真源）：Pages Functions 与 Workers 两套入口共用"
+}

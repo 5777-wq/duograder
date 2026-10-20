@@ -4,7 +4,14 @@
 
 两份报告同档 -> 逐维取均值（0.25 粒度展示）-> 总分收敛到 0.5 粒度（尾数从严向下）
 -> 校验总分落在档位区间 -> 输出终裁报告。
-档位不一致 -> exit 2（需要仲裁员 subagent）。
+
+退出码契约（与 app/core.js 的 mergeSameBand 同口径，CI 有跨实现一致性断言）：
+  0  合并成功，已输出终裁报告
+  2  需要仲裁员：①档位不一致  ②合并后总分落在档位区间之外
+  3  打回重评：两位阅卷员的评分维度集合对不齐（做不了逐维均值）
+
+维度比较按集合（顺序无关）——LLM 阅卷员输出维度顺序不同是常态，
+早期实现按顺序比较会把同档误判成"维度不一致"并错送仲裁。
 
 用法: python average_reports.py graderA.json graderB.json [out.json]
 """
@@ -12,6 +19,13 @@ import json
 import math
 import re
 import sys
+
+# Windows 控制台默认 GBK：统一强制 UTF-8，避免与 precheck.py / validate_report.py 的输出对不上
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 BAND_TABLE = {
     10: {5: (9, 10), 4: (7, 8), 3: (5, 6), 2: (3, 4), 1: (1, 2), 0: (0, 0)},

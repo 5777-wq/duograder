@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -21,6 +22,18 @@ jobs:
       - name: 应用核心回归（字数/预检/解析/校验/合并）
         run: node app/test.mjs
 
+      - name: 代理内核回归（CORS/配额/上游约束）
+        run: node proxy/proxy-core.test.mjs
+
+      - name: 桌面壳静态服务器回归（目录暴露/路径穿越/崩溃防护）
+        run: node app/static-server.test.mjs
+
+      - name: 跨实现一致性（JS 与 Python 必须同口径）
+        run: node app/parity.mjs
+
+      - name: 副本无漂移（代理内核与 app/ 副本必须与真源一致）
+        run: python scripts/sync_app.py --check
+
       - name: 评分脚本冒烟（预检 / 报告校验 / 评估器语法）
         run: |
           cd skill/kaoyan-essay
@@ -28,5 +41,5 @@ jobs:
           python scripts/precheck.py --track english-i --task small tests/fixtures/essay-synthetic-small.txt > /dev/null
           python scripts/validate_report.py ../../docs/validation/2026-10-08/graderA.json tests/fixtures/essay-synthetic-flawed.txt
           python scripts/validate_report.py ../../docs/validation/2026-10-08/graderB.json tests/fixtures/essay-synthetic-flawed.txt
-          python -m py_compile scripts/eval_planted.py scripts/average_reports.py
+          python -m py_compile scripts/eval_planted.py scripts/average_reports.py scripts/precheck.py scripts/validate_report.py
           echo "评分脚本冒烟通过"

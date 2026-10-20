@@ -15,6 +15,14 @@ import json
 import re
 import sys
 
+# Windows 控制台/重定向默认用 GBK：本脚本的输出是 JSON，会被 validate_report.py 以 UTF-8 读取，
+# 若这里用 GBK 写出，跨脚本链路会直接解码失败。统一强制 UTF-8。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 # (track, task) -> (建议下限, 建议上限)；小作文"约100词"上下限同值
 RECOMMENDED = {
     ("english-i", "small"): (100, 100),

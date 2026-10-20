@@ -14,6 +14,13 @@ import json
 import re
 import sys
 
+# Windows 控制台默认 GBK：统一强制 UTF-8，避免与 precheck.py / average_reports.py 的输出对不上
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 BAND_TABLE = {
     10: {5: (9, 10), 4: (7, 8), 3: (5, 6), 2: (3, 4), 1: (1, 2), 0: (0, 0)},
     20: {5: (17, 20), 4: (13, 16), 3: (9, 12), 2: (5, 8), 1: (1, 4), 0: (0, 0)},
@@ -76,7 +83,10 @@ def main():
     key = (meta.get("exam_track"), meta.get("task"), meta.get("max_score"))
     if key not in VALID_META:
         failures.append(f"meta 组合非法: {key}（如英二大作文必须 15 分制）")
-    if not isinstance(meta.get("word_count_reported"), int) or meta.get("word_count_reported", 0) <= 0:
+    wcr = meta.get("word_count_reported")
+    # 注意：Python 的 bool 是 int 的子类，isinstance(True, int) 为真——必须显式排除，
+    # 否则与 JS 侧 Number.isInteger 的判定不一致（网页放行、Skill 打回）
+    if isinstance(wcr, bool) or not isinstance(wcr, int) or wcr <= 0:
         failures.append("meta.word_count_reported 必须是正整数（引用预检值）")
 
     band = report.get("band", {})

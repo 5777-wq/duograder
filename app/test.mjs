@@ -1,6 +1,6 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
-import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages } from './core.js';
+import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail } from './core.js';
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -83,6 +83,62 @@ ok('essay 模式带划线/旁注规则', (() => {
   const msg = JSON.stringify(transcriptionMessages([], 'essay'));
   return msg.includes('划掉') && msg.includes('旁注') && msg.includes('保留');
 })());
+
+console.log('合并失败按 reason 分流（维度顺序不同不再被误判成"不一致"）');
+const shuffled = JSON.parse(JSON.stringify(rA));
+shuffled.scores.dimensions.reverse();
+ok('维度顺序不同（集合相同）仍可确定性合并', mergeSameBand(rA, shuffled).ok === true);
+const diffDims = JSON.parse(JSON.stringify(rA));
+diffDims.scores.dimensions[0].name = '完全不同的维度名';
+const md = mergeSameBand(rA, diffDims);
+ok('维度集合不一致 → dimension_names（应打回重评，不进仲裁）', md.ok === false && md.reason === 'dimension_names');
+ok('dimension_names 带差异明细', Array.isArray(md.detail?.only_a) && md.detail.only_a.length === 1);
+
+console.log('报告校验补齐（与 validate_report.py 同口径）');
+const noSum = JSON.parse(JSON.stringify(rA));
+noSum.consistency.dimension_sum = 99;
+ok('consistency.dimension_sum 不符被打回', validateReport(noSum, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('dimension_sum')));
+const noField = JSON.parse(JSON.stringify(rA));
+delete noField.improved_version;
+ok('缺必填字段 improved_version 被打回', validateReport(noField, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('improved_version')));
+const noEdits = JSON.parse(JSON.stringify(rA));
+delete noEdits.sentence_edits;
+ok('缺必填字段 sentence_edits 被打回', validateReport(noEdits, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('sentence_edits')));
+const boolWc = JSON.parse(JSON.stringify(rA));
+boolWc.meta.word_count_reported = true;
+ok('word_count_reported 非整数被打回', validateReport(boolWc, fx('essay-synthetic-flawed.txt')).failures.some((f) => f.includes('word_count_reported')));
+
+console.log('预检计数与 Python 同口径');
+const manyLower = 'this is a test. another line here. third one. fourth. fifth. sixth.';
+const ml = precheck(manyLower, 'english-ii', 'large').mechanical_flags.find((f) => f.type === 'lowercase_sentence_start');
+ok('句首小写计数不被 3 条截断', !!ml && ml.count === 6);
+
+console.log('设备指纹只发往内置算力通道');
+ok('invite 预设才带设备头', shouldSendDeviceId({ preset: 'invite' }) === true);
+ok('自带 Key 的供应商不带设备头', shouldSendDeviceId({ preset: 'deepseek' }) === false);
+ok('无 preset 不带设备头', shouldSendDeviceId({}) === false);
+ok('undefined 不带设备头', shouldSendDeviceId(undefined) === false);
+
+console.log('双评汇聚尺（报告头签名元素）');
+{
+  const same = dualRail({ decision: 'same_band', final_score: 8.5, band_gap: 0 }, 15, { score: 8.5 }, { score: 8.5 });
+  ok('同档：A/B/终裁 三行刻度比例一致（刻点垂直对齐）', (same.match(/--ratio:0\.5667/g) || []).length === 6);
+  ok('同档：机制文案为脚本确定性合并', same.includes('同档 · 脚本确定性合并'));
+  ok('同档：含 A/B/终裁 三行，终裁行带 dr-final', same.includes('阅卷员 A') && same.includes('阅卷员 B') && same.includes('dr-final'));
+  ok('入场延迟错开（A 0ms / B 110ms / 终裁 220ms）', same.includes('--d:0ms') && same.includes('--d:110ms') && same.includes('--d:220ms'));
+
+  const pick = dualRail({ decision: 'pick_b', final_score: 13, band_gap: 1 }, 15, { score: 10 }, { score: 13 });
+  ok('差一档：机制文案标出采 B', pick.includes('差 1 档 · 第三方仲裁采 B'));
+  ok('差一档：A 与 B 刻度分离', pick.includes('--ratio:0.6667') && pick.includes('--ratio:0.8667'));
+  const pickA = dualRail({ decision: 'pick_a', final_score: 10, band_gap: 1 }, 15, { score: 10 }, { score: 13 });
+  ok('差一档采 A 文案正确', pickA.includes('第三方仲裁采 A'));
+
+  const over = dualRail({ decision: 'same_band', final_score: 20 }, 15, { score: 20 }, { score: 20 });
+  ok('超出满分时比例夹到 1', over.includes('--ratio:1.0000'));
+  const empty = dualRail({ decision: 'same_band' }, 15, undefined, undefined);
+  ok('缺初评数据时显示 ? 且不崩', empty.includes('>?'));
+  ok('缺初评数据时比例退化为 0', empty.includes('--ratio:0.0000'));
+}
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');
 process.exit(failed ? 1 : 0);

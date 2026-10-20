@@ -1,30 +1,78 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""单一真源同步：duograder/app → 三份副本（止住手工拷贝分叉）。
+"""单一真源同步：duograder/app → 三份副本；duograder/proxy → 两份副本（止住手工拷贝分叉）。
 
-唯一真源：duograder/app/（index.html ui.js core.js style.css logo.svg icon*.png manifest.json）
+唯一真源：
+  duograder/app/    index.html ui.js core.js style.css logo.svg icon*.png manifest.json
+  duograder/proxy/  proxy-core.js（两套代理入口共用的实现）
+
 副本：
-  1. duograder/.pages-dist/        —— Cloudflare Pages 部署目录（app/ 子目录 + 根跳转 + skill/）
-  2. www/                          —— Capacitor webDir（根路径布局 + skill/）
-  3. android/.../assets/public/    —— APK 内置资产（保留 capacitor 运行时文件）
+  1. duograder/.pages-dist/                —— Cloudflare Pages 部署目录（app/ 子目录 + 根跳转 + skill/）
+  2. www/                                —— Capacitor webDir（根路径布局 + skill/）
+  3. android/.../assets/public/          —— APK 内置资产（保留 capacitor 运行时文件）
+  4. functions/v1/_proxy-core.js          —— Pages Functions 入口引用的实现副本
+  5. workers/invite-proxy/_proxy-core.js  —— Workers 入口引用的实现副本
 
-用法：python scripts/sync_app.py   （在 duograder 仓库根目录执行）
+副本 4/5 必须与真源逐字节一致：两套代理历史上已经漂移过一次（Worker 缺匿名通道、
+免费额度与配额查询，Pages 缺 IPv6 归并），CI 用 `--check` 断言不漂移。
+
+用法：
+  python scripts/sync_app.py           # 同步（本地开发 / 打包前）
+  python scripts/sync_app.py --check   # 只校验有无漂移，有漂移则 exit 1（CI 用）
 """
+import filecmp
 import shutil
 import sys
 from pathlib import Path
 
+# Windows 控制台默认 GBK，打印 ✓ / 中文会抛 UnicodeEncodeError；统一转 UTF-8 且不因个别字符失败
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
-FILES = ["index.html", "ui.js", "core.js", "style.css", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
+PROXY = ROOT / "proxy"
+
+APP_FILES = ["index.html", "ui.js", "core.js", "style.css", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
 # capacitor 运行时文件：同步 assets 时必须保留，不能当作过期副本删掉
 CAP_RUNTIME = {"cordova.js", "cordova_plugins.js", "capacitor.config.json", "capacitor.plugins.json"}
+
+# 代理内核真源 → 副本清单
+PROXY_COPIES = [
+    (PROXY / "proxy-core.js", ROOT / "functions" / "v1" / "_proxy-core.js"),
+    (PROXY / "proxy-core.js", ROOT / "workers" / "invite-proxy" / "_proxy-core.js"),
+]
+
+CHECK_ONLY = "--check" in sys.argv
+
+
+def _copy(src: Path, dst: Path):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def _same(src: Path, dst: Path) -> bool:
+    return dst.exists() and filecmp.cmp(src, dst, shallow=False)
+
+
+def check_proxy_copies() -> list:
+    """返回漂移清单（空列表 = 一致）。"""
+    drift = []
+    for src, dst in PROXY_COPIES:
+        if not src.exists():
+            drift.append(f"真源缺失: {src.relative_to(ROOT)}")
+        elif not _same(src, dst):
+            drift.append(f"副本与真源不一致: {dst.relative_to(ROOT)}")
+    return drift
 
 
 def copy_app_files(dest: Path):
     dest.mkdir(parents=True, exist_ok=True)
-    for f in FILES:
-        shutil.copy2(APP / f, dest / f)
+    for f in APP_FILES:
+        _copy(APP / f, dest / f)
 
 
 def sync_skill(dest_root: Path):
@@ -49,7 +97,7 @@ def sync_pages_dist():
         'justify-content:center;height:100vh;margin:0"><a href="/app/" style="color:#c4633f">进入 DuoGrader →</a></body></html>',
         encoding="utf-8",
     )
-    print(f"✓ .pages-dist 已同步（{len(FILES)} 文件 + skill + 跳转页）")
+    print(f"✓ .pages-dist 已同步（{len(APP_FILES)} 文件 + skill + 跳转页）")
 
 
 def sync_www(dest: Path, label: str):
@@ -73,14 +121,33 @@ def sync_apk_assets():
     print("✓ APK assets 已同步（保留 capacitor 运行时文件）")
 
 
+def sync_proxy_copies():
+    for src, dst in PROXY_COPIES:
+        _copy(src, dst)
+        print(f"✓ 代理内核副本已同步: {dst.relative_to(ROOT)}")
+
+
 def main():
     if not APP.exists():
         sys.exit("找不到 app/ 真源目录")
+    if not PROXY.exists():
+        sys.exit("找不到 proxy/ 真源目录")
+
+    if CHECK_ONLY:
+        drift = check_proxy_copies()
+        if drift:
+            for d in drift:
+                print(f"[失败] {d}")
+            print(f"代理内核副本漂移 {len(drift)} 处：跑 `python scripts/sync_app.py` 对齐")
+            sys.exit(1)
+        print("代理内核副本与真源一致（无漂移）")
+        return
+
     sync_pages_dist()
-    apk_root = ROOT
-    sync_www(apk_root / "www", "www（Capacitor webDir）")
+    sync_www(ROOT / "www", "www（Capacitor webDir）")
     sync_apk_assets()
-    print("全部副本已与 app/ 对齐。提交后 CI（apk.yml）自动构建 APK。")
+    sync_proxy_copies()
+    print("全部副本已与真源对齐。提交后 CI（apk.yml）自动构建 APK。")
 
 
 if __name__ == "__main__":

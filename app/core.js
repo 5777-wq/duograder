@@ -48,16 +48,21 @@ export function mechanicalFlags(text) {
   if (zh) flags.push({ type: 'chinese_chars', count: zh, detail: '作文正文含中文字符（疑似混入）' });
   const repeated = text.match(/\b([A-Za-z]+)\s+\1\b/gi) || [];
   if (repeated.length) {
-    const uniq = [...new Set(repeated.map((r) => r.trim().split(/\s+/)[0].toLowerCase()))].slice(0, 8);
+    // 去重后必须排序：precheck.py 用 sorted()，这里不排会让两套实现的事实清单文案不一致
+    const uniq = [...new Set(repeated.map((r) => r.trim().split(/\s+/)[0].toLowerCase()))].sort().slice(0, 8);
     flags.push({ type: 'repeated_word', count: repeated.length, detail: '疑似相邻重复词: ' + uniq.join(', ') });
   }
   const miss = (text.match(/[A-Za-z][,.;:!?][A-Za-z]/g) || []).length;
-  if (miss) flags.push({ type: 'missing_space_after_punct', count: miss, detail: '标点后疑似缺空格' });
+  if (miss) flags.push({ type: 'missing_space_after_punct', count: miss, detail: '标点后疑似缺空格（如 word,Next）' });
   const dp = (text.replace(/\.\.\./g, '').match(/[,;:!?]{2,}/g) || []).length;
   if (dp) flags.push({ type: 'double_punct', count: dp, detail: '连续标点（省略号除外）' });
   const sentences = text.trim().split(/(?<=[.!?])\s+/).filter(Boolean);
-  const lower = sentences.filter((s) => /^[a-z]/.test(s)).slice(0, 3);
-  if (lower.length) flags.push({ type: 'lowercase_sentence_start', count: lower.length, detail: '句首小写: ' + lower.map((s) => s.slice(0, 25)).join(' | ') });
+  // 计数要用全量（与 precheck.py 同口径）；只取前 3 条是给 detail 展示用的
+  const lowerAll = sentences.filter((s) => /^[a-z]/.test(s.trim()));
+  if (lowerAll.length) {
+    const lower = lowerAll.slice(0, 3);
+    flags.push({ type: 'lowercase_sentence_start', count: lowerAll.length, detail: '句首小写: ' + lower.map((s) => s.trim().slice(0, 30)).join(' | ') });
+  }
   return flags;
 }
 
@@ -168,10 +173,52 @@ const SEV_ALIAS = { '错误': 'error', '欠佳': 'awkward', '润色': 'style', e
 // rubric 5.2 黑名单：可复用句式里出现即打回（与 scripts/validate_report.py 同口径）
 const REUSABLE_BLACKLIST = ['warm and happy', 'every coin has two sides', 'with the development of', 'i will be very happy', 'as far as i am concerned'];
 
+// —— 双评汇聚尺（报告头的签名元素，纯函数）——
+// 把两位阅卷员的初评与终裁分放到同一条 0..满分 刻度上：
+// 同档 → 两个刻点垂直对齐（均值合并）；差一档 → 刻点分开、终裁落在被采信的一方。
+// 一眼看见这个产品在干什么，而不是读一行说明文字。
+export function dualRail(final, maxScore, ia, ib) {
+  const ratio = (v) => {
+    const n = Number(v);
+    // 定 4 位：既够精确，又不让内联样式里出现一长串浮点尾数（各分支格式必须一致）
+    if (!Number.isFinite(n)) return '0.0000';
+    return Math.max(0, Math.min(1, n / maxScore)).toFixed(4);
+  };
+  const num = (v) => (v === undefined || v === null || Number.isNaN(Number(v)) ? '?' : String(v));
+  const row = (label, score, kind, delay) => `
+    <div class="dr-row ${kind}">
+      <span class="dr-label">${label}</span>
+      <span class="dr-track">
+        <i class="dr-fill" style="--ratio:${ratio(score)};--d:${delay}ms"></i>
+        <i class="dr-mark" style="--ratio:${ratio(score)};--d:${delay}ms"></i>
+      </span>
+      <span class="dr-num">${num(score)}</span>
+    </div>`;
+  const dec = final.decision;
+  const mech = dec === 'same_band'
+    ? '同档 · 脚本确定性合并（尾数从严）'
+    : `差 ${num(final.band_gap ?? 1)} 档 · 第三方仲裁${dec === 'pick_a' ? '采 A' : dec === 'pick_b' ? '采 B' : ''}`;
+  return `
+  <div class="dual-rail">
+    <div class="dr-head">
+      <span class="dr-eyebrow">双评过程</span>
+      <span class="dr-mech">${mech}</span>
+    </div>
+    ${row('阅卷员 A', ia?.score, '', 0)}
+    ${row('阅卷员 B', ib?.score, '', 110)}
+    ${row('终裁', final.final_score, 'dr-final', 220)}
+  </div>`;
+}
+
 export function validateReport(report, essayText) {
   const failures = [], warnings = [];
   const essayNorm = essayText.trim().split(/\s+/).join(' ');
   const norm = (s) => String(s || '').trim().split(/\s+/).join(' ');
+
+  // 必填字段（与 validate_report.py 同口径）：缺字段一律打回
+  for (const field of ['meta', 'band', 'scores', 'consistency', 'sentence_edits', 'improved_version', 'top_problems']) {
+    if (!(field in report)) failures.push(`缺少必填字段: ${field}`);
+  }
 
   const meta = report.meta || {};
   const key = `${meta.exam_track}_${meta.task}`;
@@ -203,6 +250,11 @@ export function validateReport(report, essayText) {
     if (!(lo - EPS <= sum && sum <= hi + EPS)) failures.push(`维度分之和 ${sum} 不在档位区间 [${lo}, ${hi}] 内`);
   }
   if (report.consistency?.in_band_range !== true) failures.push('consistency.in_band_range 必须为 true');
+  // consistency.dimension_sum 必须与维度分之和一致（与 validate_report.py 同口径，
+  // 旧实现漏了这一项，导致网页放行、Skill 打回，两条路径对同一报告结论不同）
+  if (report.consistency && Math.abs((report.consistency.dimension_sum ?? -1) - sum) > EPS) {
+    failures.push('consistency.dimension_sum 与维度分之和不符');
+  }
 
   (report.sentence_edits || []).forEach((e, i) => {
     const sev = SEV_ALIAS[e.severity];
@@ -227,10 +279,18 @@ export function validateReport(report, essayText) {
 export function mergeSameBand(a, b) {
   const ba = a.band.band, bb = b.band.band;
   if (ba !== bb) return { ok: false, reason: 'arbiter' };
-  const da = Object.fromEntries(a.scores.dimensions.map((d) => [d.name, d]));
-  const db = Object.fromEntries(b.scores.dimensions.map((d) => [d.name, d]));
+  const da = Object.fromEntries((a.scores?.dimensions || []).map((d) => [d.name, d]));
+  const db = Object.fromEntries((b.scores?.dimensions || []).map((d) => [d.name, d]));
   const names = Object.keys(da);
-  if (names.join() !== Object.keys(db).join()) return { ok: false, reason: 'dimension_names' };
+  // 维度比较必须与 average_reports.py 同口径：按集合比（顺序无关）。
+  // 旧实现用 names.join() 比字符串，LLM 阅卷员输出顺序一不同就被判成"维度不一致"，
+  // 而同档本应走确定性均值合并——这是两条路径结论不一致的根源。
+  const setB = new Set(Object.keys(db));
+  if (names.length !== setB.size || names.some((n) => !setB.has(n))) {
+    const onlyA = names.filter((n) => !setB.has(n));
+    const onlyB = [...setB].filter((n) => !names.includes(n));
+    return { ok: false, reason: 'dimension_names', detail: { only_a: onlyA, only_b: onlyB } };
+  }
   const dims = names.map((n) => ({
     name: n, max: da[n].max, score: (da[n].score + db[n].score) / 2,
     note: `A给${da[n].score}，B给${db[n].score}，均值${(da[n].score + db[n].score) / 2}`,
@@ -324,8 +384,16 @@ export function repairMessages(baseMessages, badOutput, problems) {
   ];
 }
 
-// 设备指纹：与服务端 IP 双重计数，抬高清 IP 刷免费额度的成本（存 localStorage，清数据才会变）
-function didHdr() {
+// 是否给这次请求附加设备指纹：只在内置算力（邀请码代理）通道发。
+// 抽成纯函数是为了可测——用户自配 API Key 直连第三方时不应把设备标识泄漏出去。
+export function shouldSendDeviceId(settings) {
+  return settings?.preset === 'invite';
+}
+
+// 设备指纹：与服务端 IP 双重计数，抬高清 IP 刷免费额度的成本（存 localStorage，清数据才会变）。
+// 只在内置算力（邀请码代理）通道发送——用户自配 API Key 直连第三方时，不应把设备标识泄漏出去。
+function didHdr(settings) {
+  if (!shouldSendDeviceId(settings)) return '';
   try {
     let d = localStorage.getItem('duograder_did');
     if (!d) { const a = new Uint8Array(6); crypto.getRandomValues(a); d = 'd' + Date.now().toString(36) + [...a].map((b) => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('duograder_did', d); }
@@ -432,9 +500,10 @@ export async function callChat(settings, messages, { temperature = 0.3, signal, 
       signal.addEventListener('abort', onOuterAbort, { once: true });
     }
     try {
+      const did = didHdr(settings);
       const res = await fetch(base + '/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (settings.apiKey || ''), ...(didHdr() ? { 'X-Device-Id': didHdr() } : {}) },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (settings.apiKey || ''), ...(did ? { 'X-Device-Id': did } : {}) },
         body: JSON.stringify({ model: settings.model, messages, temperature, stream: false, ...(bodyExtra || {}) }),
         signal: ctrl.signal,
       });

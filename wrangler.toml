@@ -1,7 +1,32 @@
-name = "duograder"
-pages_build_output_dir = "."
-compatibility_date = "2024-09-23"
+# DuoGrader · Cloudflare Pages 部署配置
+#
+# 部署顺序：
+#   1) python scripts/sync_app.py            # 生成 .pages-dist（Pages 输出目录）并同步代理内核副本
+#   2) wrangler pages secret put MINIMAX_API_KEY
+#   3) wrangler pages secret put INVITE_CODE
+#   4) wrangler pages deploy
+#
+# 为什么输出目录是 .pages-dist 而不是仓库根：
+#   仓库根里还有 data/（你的批改记录）、node_modules/、android/ 等目录，
+#   整根发布会把它们一并暴露到公网。.pages-dist 只含 app/ + skill/ + 根跳转页。
+#
+# 说明：functions/ 目录在仓库根，Pages 部署时会自动打包为 Functions。
 
+name = "duograder"
+pages_build_output_dir = ".pages-dist"
+compatibility_date = "2026-10-20"
+
+[vars]
+UPSTREAM_BASE = "https://api.minimaxi.com/v1"
+UPSTREAM_MODEL = "MiniMax-M3.1-Flash-Preview"
+# CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配，不会误匹配 evil-example.com）。
+# 自建部署请改成自己的域名；填 * 等于放开所有来源，不要在公网这么干。
+ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"
+# 免费额度：每 IP/设备 50 次，全站匿名每日上限 300 次
+FREE_LIMIT = "50"
+ANON_DAILY_CAP = "300"
+
+# 匿名免费额度的 KV 计数绑定（没有它，匿名通道关闭，只走邀请码）
 [[kv_namespaces]]
 binding = "FREE_KV"
 id = "dc547e6346b14e7c8c37ad4785d86429"

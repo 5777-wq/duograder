@@ -1,6 +1,6 @@
 // DuoGrader 网页版编排层：预检 → 双盲 → 校验（一次打回） → 合并/仲裁 → 渲染 → 历史归档
 import {
-  precheck, countWords, parseModelJSON, validateReport, mergeSameBand,
+  precheck, countWords, parseModelJSON, validateReport, mergeSameBand, dualRail,
   graderMessages, arbiterMessages, repairMessages, callChat, transcriptionMessages, detectTaskType,
   probeCors, fetchModelList, chatTestMessages, visionTestMessages, httpErrorHint, PRESETS, RECOMMENDED, STATUS_LABEL,
 } from './core.js';
@@ -20,6 +20,7 @@ const state = { track: 'english-ii', task: 'large', rubric: null, schema: null, 
 /* ---------- 初始化 ---------- */
 async function init() {
   loadSettings();
+  staggerCards(document.querySelector('.wrap'), 50);
   bindSeg('seg-track', 'track');
   bindSeg('seg-task', 'task');
   $('essay-in').addEventListener('input', updateCountBar);
@@ -161,7 +162,13 @@ function applyDetectResult({ task, track, evidence }) {
   if (t) setSeg('seg-task', t, 'task');
   const note = $('detect-note');
   note.hidden = false;
-  note.textContent = `✓ 已自动识别：${TRACKS[state.track]} · ${TASKS[state.task]}${evidence ? `（依据：${evidence}）` : ''}。如识别有误，点选上方即可修改。`;
+  if (tr) {
+    note.textContent = `✓ 已自动识别：${TRACKS[state.track]} · ${TASKS[state.task]}${evidence ? `（依据：${evidence}）` : ''}。如识别有误，点选上方即可修改。`;
+  } else {
+    // 小作文英一英二都是"约100词/10分"，题面文本里没有科目硬信号——不能谎称已识别科目。
+    // 真题年份比对是 skill 侧的独有能力，网页端只能请用户自己确认。
+    note.textContent = `✓ 已自动识别题型：${TASKS[state.task]}${evidence ? `（依据：${evidence}）` : ''}。小作文题面无科目硬信号，**英语一/英语二请点上方手动确认**（判错科目会连分值制一起错）。`;
+  }
   return true;
 }
 // —— 大/小作文与科目自动识别（依据题面词数/分值/体裁，转写或输入后触发）。
@@ -902,7 +909,8 @@ function bindCrop() {
 
 function visionSettings() {
   const s = state.settings || {};
-  return { baseURL: s.baseURL, apiKey: s.apiKey, model: s.vmodel || s.model };
+  // preset 必须带出来：core.js 据此判断是否附加设备指纹（只有内置算力通道才发）
+  return { preset: s.preset, baseURL: s.baseURL, apiKey: s.apiKey, model: s.vmodel || s.model };
 }
 
 async function transcribe() {
@@ -1085,8 +1093,19 @@ async function runPipeline() {
     if (m.ok) {
       final = m.final;
       setStep('st-merge', 'done', '同档，脚本确定性合并（均值）');
+    } else if (m.reason === 'dimension_names') {
+      // 同档但维度口径不一致 → 按 rubric 打回重评，绝不能送仲裁：
+      // 仲裁协议是"差一档二选一"，用在同档上等于整份挑一份，丢掉确定性均值合并。
+      // （旧实现把 reason 丢掉，所有失败一律标成"档位差 1"并送仲裁，结论与 Skill 路径不一致）
+      setStep('st-merge', 'fail', '维度口径不一致，本轮作废');
+      const d = m.detail || { only_a: [], only_b: [] };
+      const diff = [...d.only_a.map((x) => 'A 有 ' + x), ...d.only_b.map((x) => 'B 有 ' + x)].join('、') || '维度集合不一致';
+      $('report-area').innerHTML = `<div class="card"><h2><span class="dot"></span>本轮作废（维度口径不一致）</h2>
+        <p style="font-size:13.5px;color:var(--muted)">A 与 B 的评分维度对不齐（${esc(diff)}），无法做确定性均值合并。请点"开始双评"重跑一轮。</p></div>`;
+      return;
     } else {
-      setStep('st-merge', 'doing', '档位差 1，仲裁中…');
+      // arbiter（档位差 1）/ out_of_band（合并后越界，需第三方复核）→ 走仲裁
+      setStep('st-merge', 'doing', `档位差 ${bandGap}，仲裁中…`);
       const out = await callChat(state.settings, arbiterMessages({
         rubric: state.rubric, essay, prompt: $('prompt-in').value.trim(), reportA: ra.report, reportB: rb.report,
         kernel: state.kernel,
@@ -1121,6 +1140,16 @@ async function runPipeline() {
 const SEV_DISP = { '错误': '错误', '欠佳': '欠佳', '润色': '润色', error: '错误', awkward: '欠佳', style: '润色' };
 const SEV_CLS = { '错误': 'error', '欠佳': 'awkward', '润色': 'style', error: 'error', awkward: 'awkward', style: 'style' };
 
+// 入场阶梯：按当前 DOM 顺序写 --d，不用 CSS :nth-child（插入任何兄弟节点都会让索引错位）
+function staggerCards(container, step = 60) {
+  if (!container) return;
+  [...container.children].forEach((el, i) => {
+    if (el.classList.contains('card')) el.style.setProperty('--d', i * step + 'ms');
+  });
+}
+
+// 双评汇聚尺的生成在 core.js（纯逻辑，可被单测覆盖）：见 dualRail()
+
 function renderReport(final, facts, essay) {
   const track = final.report_a?.meta?.exam_track || state.track || 'english-ii';
   const task = final.report_a?.meta?.task || state.task || 'large';
@@ -1141,10 +1170,10 @@ function renderReport(final, facts, essay) {
         <span>科目题型</span><b>${TRACKS[track]} · ${TASKS[task]}</b>
         <span>档位</span><b>第 ${esc(final.final_band)} 档（${esc(String(final.final_range || ''))}）</b>
         <span>字数</span><b>${esc(String(facts?.word_count ?? '?'))} 词（预检脚本）</b>
+        ${modelLabel ? `<span>阅卷模型</span><b>${esc(modelLabel)}</b>` : ''}
       </div>
     </div>
-    <div class="dual-note">⚖️ 双评过程：A 初评第${esc(String(ia?.band ?? '?'))}档 ${esc(String(ia?.score ?? '?'))} 分 · B 初评第${esc(String(ib?.band ?? '?'))}档 ${esc(String(ib?.score ?? '?'))} 分 · 档位差 ${esc(String(final.band_gap ?? '?'))} ·
-      ${final.decision === 'same_band' ? '同档取均值（尾数从严），脚本合并' : '第三方仲裁' + (final.decision === 'pick_a' ? '采 A' : final.decision === 'pick_b' ? '采 B' : '')}${modelLabel ? ` · 阅卷模型 ${esc(modelLabel)}` : ''}</div>
+    ${dualRail(final, maxScore, ia, ib)}
     ${flags.length ? flags.map((f) => `<div class="flag-line">预检 · ${esc(f.detail)}（${f.count} 处）</div>`).join('') : ''}
     <table class="rep"><thead><tr><th style="width:32%">维度</th><th>分值</th><th>得分</th><th style="width:44%">扣分依据</th></tr></thead>
       <tbody>${dims.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${esc(String(d.max))}</td><td class="num" style="color:var(--accent-deep)">${esc(String(d.score))}</td><td>${esc(d.note || d.deduction_reason || '')}</td></tr>`).join('')}</tbody></table>
@@ -1173,6 +1202,7 @@ function renderReport(final, facts, essay) {
         ${(rep.reusable.words || []).map((w) => `<span class="chip awkward">${esc(w)}</span>`).join('')}
       </div>` : ''}
   </section>`;
+  staggerCards($('report-area'), 70);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 

@@ -1,31 +1,17 @@
-// DuoGrader 桌面壳（Electron）：内置静态服务器（保持 ../skill 规则相对路径可用）+ 窗口
+// DuoGrader 桌面壳（Electron）：内置静态服务器 + 窗口
+//
+// 静态服务器与路径守卫在 app/static-server.cjs（无 electron 依赖，可被 node 直接测试：
+// 见 app/static-server.test.mjs）。这里只负责起服务、开窗口。
 const { app, BrowserWindow, shell } = require('electron');
-const http = require('http');
-const fs = require('fs');
 const path = require('path');
+const { createStaticServer } = require('./static-server.cjs');
 
 const ROOT = path.join(__dirname, '..'); // duograder 仓库根目录
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
-  '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8',
-  '.txt': 'text/plain; charset=utf-8',
-};
 
 function startServer() {
   return new Promise((resolve) => {
-    const srv = http.createServer((req, res) => {
-      const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-      let fp = path.normalize(path.join(ROOT, urlPath));
-      if (!fp.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
-      if (urlPath === '/' || urlPath === '') fp = path.join(ROOT, 'app', 'index.html');
-      fs.readFile(fp, (err, data) => {
-        if (err) { res.writeHead(404); return res.end('not found'); }
-        res.writeHead(200, { 'Content-Type': MIME[path.extname(fp).toLowerCase()] || 'application/octet-stream' });
-        res.end(data);
-      });
-    });
+    const srv = createStaticServer(ROOT);
+    srv.on('error', (e) => { console.error('local server error:', e && e.message); });
     srv.listen(0, '127.0.0.1', () => resolve(srv));
   });
 }
@@ -40,7 +26,8 @@ async function createWindow() {
     backgroundColor: '#f0eee6',
     autoHideMenuBar: true,
     webPreferences: {
-      // 自用本地应用：放开跨域限制，任意供应商 API 都可直连（等价于浏览器加 CORS 插件）
+      // 自用本地应用：放开跨域限制，任意供应商 API 都可直连（等价于浏览器加 CORS 插件）。
+      // 本地服务器只暴露 app/ 与 skill/，因此这条放宽不会连带暴露仓库里的其它数据。
       webSecurity: false,
       contextIsolation: true,
       nodeIntegration: false,
