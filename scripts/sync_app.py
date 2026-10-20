@@ -89,14 +89,21 @@ def sync_pages_dist():
     app_dir.mkdir(exist_ok=True)
     copy_app_files(app_dir)
     sync_skill(d)
-    redirect = d / "index.html"
-    redirect.write_text(
-        '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
-        '<meta http-equiv="refresh" content="0;url=/app/"><title>DuoGrader</title></head>'
-        '<body style="background:#f0f2f5;font-family:sans-serif;display:flex;align-items:center;'
-        'justify-content:center;height:100vh;margin:0"><a href="/app/" style="color:#c4633f">进入 DuoGrader →</a></body></html>',
-        encoding="utf-8",
-    )
+    # 根跳转页以仓库根的 index.html 为唯一真源（它带着「考研总站」入口等站点级内容），
+    # 脚本不再自己生成一份——两份并存会分叉。
+    root_index = ROOT / "index.html"
+    if root_index.exists():
+        shutil.copy2(root_index, d / "index.html")
+        print("✓ .pages-dist 已同步（根跳转页取自仓库根 index.html）")
+    else:
+        (d / "index.html").write_text(
+            '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
+            '<meta http-equiv="refresh" content="0;url=/app/"><title>DuoGrader</title></head>'
+            '<body style="background:#f0f2f5;font-family:sans-serif;display:flex;align-items:center;'
+            'justify-content:center;height:100vh;margin:0"><a href="/app/" style="color:#c4633f">进入 DuoGrader →</a></body></html>',
+            encoding="utf-8",
+        )
+        print("! 仓库根没有 index.html，已生成兜底跳转页")
     print(f"✓ .pages-dist 已同步（{len(APP_FILES)} 文件 + skill + 跳转页）")
 
 

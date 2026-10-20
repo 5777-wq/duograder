@@ -163,15 +163,18 @@ git clone https://github.com/5777-wq/duograder.git
 - **CORS 白名单**只放行本应用来源（`ALLOWED_ORIGINS` 可配，支持 `*.example.com` 通配，按域分量匹配）
 - **不落作文数据**：代理纯转发，只有计数进 KV
 
-### 自托管三步
+### 自托管四步
 
 ```bash
-python scripts/sync_app.py                                   # 生成 .pages-dist + 同步代理副本
-wrangler kv namespace create FREE_KV                          # 仅匿名免费额度需要
+python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
 wrangler pages secret put MINIMAX_API_KEY
 wrangler pages secret put INVITE_CODE
 wrangler pages deploy
 ```
+
+> **为什么输出目录是 `.pages-dist` 而不是仓库根**：仓库根里还有 `data/`（你的批改记录）、`node_modules/`、`android/`。整根发布会把它们一并暴露到公网，所以 `wrangler.toml` 的 `pages_build_output_dir` 指向 `.pages-dist`。
+
+> **匿名免费额度**需要 KV 计数绑定。本仓的 `wrangler.toml` 里已绑好 `FREE_KV`；自建部署时改成你自己的：`wrangler kv namespace create FREE_KV` 后把返回的 id 填进 `[[kv_namespaces]]`。没绑时只有邀请码模式可用。
 
 代码里的代理地址是演示实例；自己部署后，在 `app/core.js` 的 `PRESETS` 里改一行 `baseURL` 即可。
 
