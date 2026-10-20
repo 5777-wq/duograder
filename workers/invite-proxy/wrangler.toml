@@ -15,8 +15,8 @@ compatibility_date = "2026-10-20"
 
 [vars]
 UPSTREAM_BASE = "https://api.minimaxi.com/v1"
-UPSTREAM_MODEL = "MiniMax-M3.1-Flash-Preview"
-UPSTREAM_VISION_MODEL = "MiniMax-M3.1-Flash-Preview"
+UPSTREAM_MODEL = "MiniMax-M3.1-Flash"
+UPSTREAM_VISION_MODEL = "MiniMax-M3.1-Flash"
 # CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配）
 ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"
 FREE_LIMIT = "50"

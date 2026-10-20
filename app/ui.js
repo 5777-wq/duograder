@@ -8,6 +8,7 @@ import {
   buildScoreCurve, renderScoreChart, MAX_SCORES,
   esc, TRACKS, TASKS, renderReportHtml, provInfo,
 } from './core.js';
+import { makeShareCard } from './share-card.js';
 
 const $ = (id) => document.getElementById(id);
 const LENGTH_HINT = {
@@ -16,7 +17,7 @@ const LENGTH_HINT = {
   short_half: ['字数不足一半（封顶第二档）', 'bad'],
 };
 
-const state = { track: 'english-ii', task: 'large', rubric: null, schema: null, kernel: null, busy: false, settings: null, photos: [], transcribed: false, confirmed: false };
+const state = { track: 'english-ii', task: 'large', rubric: null, schema: null, kernel: null, busy: false, settings: null, photos: [], transcribed: false, confirmed: false, lastResult: null };
 
 /* ---------- 初始化 ---------- */
 async function init() {
@@ -66,6 +67,31 @@ async function init() {
     if (ok) saveSettings({ message: '✓ 测通了，设置已保存。可以开始批改了。' });
   });
   $('btn-save').addEventListener('click', () => saveSettings());
+  // 分享成绩：报告里的按钮用事件委托（报告是 innerHTML 重渲染的）
+  $('report-area').addEventListener('click', (e) => {
+    if (e.target.closest('[data-share]')) openShare();
+  });
+  $('share-close').addEventListener('click', closeShare);
+  $('share-mask').addEventListener('click', closeShare);
+  $('btn-share-save').addEventListener('click', () => {
+    if (!shareBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = shareBlobUrl;
+    a.download = `DuoGrader-成绩-${state.lastResult?.final_score ?? ''}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+  $('btn-share-link').addEventListener('click', async () => {
+    const url = shareSiteUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      banner('链接已复制，去微信粘贴给同学吧。', 'info');
+    } catch {
+      banner('复制失败，手动复制：' + url, 'info');
+    }
+    setTimeout(() => { $('banner-area').innerHTML = ''; }, 3000);
+  });
   // 自定义供应商下拉（原生 select 样式不可控，弃用）
   const provBtn = $('prov-btn'), provList = $('prov-list');
   provBtn.addEventListener('click', (e) => {
@@ -1416,6 +1442,7 @@ async function runPipeline() {
     }
 
     renderReport(final, state.facts, essay);
+    state.lastResult = final;   // 供分享卡片使用
     saveHistory({
       id: Date.now(), ts: new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
       track: state.track, task: state.task, essay, prompt: $('prompt-in').value.trim(), facts: state.facts, final,
@@ -1452,6 +1479,40 @@ function renderReport(final, facts, essay) {
   });
   staggerCards($('report-area'), 70);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ---------- 分享成绩卡 ---------- */
+let shareBlobUrl = '';
+// 站点地址取内置算力预设的来源（自建部署时改 PRESETS 的 baseURL 即可）
+function shareSiteUrl() {
+  const p = PRESETS.find((x) => x.id === 'invite');
+  try { return new URL(p.baseURL.replace(/\/v1\/?$/, '') + '/app/').href; }
+  catch { return 'https://duograder.pages.dev/app/'; }
+}
+function closeShare() {
+  $('modal-share').classList.remove('show');
+  $('share-mask').classList.remove('show');
+}
+async function openShare() {
+  const final = state.lastResult;
+  if (!final) { banner('还没有可分享的成绩，先批改一篇。', 'bad'); return; }
+  const btn = $('btn-share-save');
+  btn.disabled = true;
+  try {
+    const { blob } = await makeShareCard(final, state.facts, {
+      track: state.track, task: state.task, model: state.settings?.model || '',
+      url: shareSiteUrl(),
+    });
+    if (shareBlobUrl) URL.revokeObjectURL(shareBlobUrl);
+    shareBlobUrl = URL.createObjectURL(blob);
+    $('share-img').src = shareBlobUrl;
+    $('modal-share').classList.add('show');
+    $('share-mask').classList.add('show');
+  } catch (e) {
+    banner('生成分享图失败：' + shortErr(e.message), 'bad');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 init().catch((e) => {

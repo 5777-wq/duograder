@@ -25,6 +25,10 @@
 
 ---
 
+[为什么是「双评」](#为什么是双评) · [五种用法](#五种用法) · [API 设置怎么填](#api-设置怎么填新手向) · [Agent Skill](#-agent-skill) · [工作原理](#工作原理) · [成绩曲线](#成绩曲线看得见的进步) · [分享成绩卡](#分享成绩卡) · [核心资产](#核心资产) · [架构与工程约定](#架构与工程约定) · [验证](#验证) · [开发与部署](#开发与部署) · [共享算力](#共享算力可选自托管) · [隐私](#隐私) · [已知局限](#已知局限) · [接下来可以做的](#接下来可以做的)
+
+---
+
 ## 为什么是「双评」
 
 单次 LLM 打分的顽疾：**同一篇作文，评两次能差出一个档位**——分数飘、把对的改错、字数靠猜。DuoGrader 的判断是：瓶颈不在模型，在评分流程。所以我们把真实考研阅卷的制度搬了过来：
@@ -178,6 +182,8 @@ git clone https://github.com/5777-wq/duograder.git
 
 两者共用同一份实现 `proxy/proxy-core.js`（真源），副本由 `scripts/sync_app.py` 同步，CI 断言二者与真源逐字节一致——历史上这两套曾经漂移过一次（Worker 缺匿名通道、免费额度与配额查询，Pages 缺 IPv6 归并）。
 
+> **内置算力的阅卷模型已升级到正式版 `MiniMax-M3.1-Flash`**（此前是 `MiniMax-M3.1-Flash-Preview`）。官方模型列表已于 2026-10-19 去掉 Preview 后缀；M3.1 Flash 相比 M3 输入/输出单价降了一半以上、速度提升近 3 倍，1M 上下文、文本与图片输入。前端预设与两套代理的 `UPSTREAM_MODEL` 都已同步更新（代理侧有模型白名单，会强制回默认模型，所以两边必须一起改）。
+
 | 方式 | 怎么用 | 额度 |
 |---|---|---|
 | **邀请码** | 点右上角「登录」输入邀请码 | 不限次 |
@@ -225,6 +231,22 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 
 ---
 
+## 分享成绩卡
+
+<img src="docs/assets/share-preview.png" width="360" alt="成绩分享卡片">
+
+批改完点报告右上角的「分享成绩」，生成分享卡片：**大分数 + 双评汇聚尺 + 最限制得分的问题 + 二维码**。手机长按图片就能存下来发微信——卡片本身带内容（不只是晒分），同学看了会想问"你用的什么"，二维码直达网站。
+
+**全部在浏览器本地生成**：卡片用 Canvas 画，二维码是本地编码的（`app/qrcode.js`，字节模式 / 纠错 M / 版本 1-6）。作文内容、分数、Key 都不为了"生成分享图"发到任何服务器——走第三方二维码接口就等于把用户的链接和意图交给外部服务，与本项目"数据不出本地"的承诺冲突。
+
+二维码是自己实现的，**不是调接口**：
+
+- 独立锚点：里德-所罗门用 **ISO/IEC 18004 的标准测试向量**；格式信息用**已发表的 (纠错等级, 掩码) 常量**；生成结果自洽（格式信息能解回自己的掩码与纠错等级）
+- 回归锁：`app/fixtures/qr-cases.json` 锁住实现，改了没同步 fixture，CI 直接变红
+- 跨实现与可扫性：`scripts/verify_qr.mjs` 与参考实现逐模块比对，并用 jsQR 实际解码（需 `npm install qrcode jsqr --no-save`，仅开发期用）
+
+---
+
 ## 核心资产
 
 ### 内核（评分这件事本身）
@@ -246,6 +268,8 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 | 位置 | 是什么 |
 |---|---|
 | [`app/core.js`](app/core.js) | 同一套内核的浏览器实现（纯函数，ESM，Node 也能加载）+ 报告模板 + 汇聚尺 + 成绩曲线 |
+| [`app/qrcode.js`](app/qrcode.js) | 自研 QR 码编码器（本地生成，不走第三方接口） |
+| [`app/share-card.js`](app/share-card.js) | 分享卡片绘制（Canvas 本地渲染） |
 | [`app/ui.js`](app/ui.js) | 编排层：预检 → 双盲 → 校验 → 合并/仲裁 → 渲染 → 历史归档 |
 | [`app/style.css`](app/style.css) | 瑞士国际主义视觉系统（网格 / 无衬线 / 单强调色 / 圆角 0） |
 | [`app/sw.js`](app/sw.js) | Service Worker：网络优先 + 离线回落，把网页变成可安装的 App 壳 |
@@ -307,11 +331,11 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 | 5 | 句级种子查全率 | 预植错误检出 | ✅ 内核 v1.0 92% → v1.3 **100%**，误报 0（[记录](docs/validation/kernel-eval-20261009/SUMMARY.md)） |
 | 6 | 跨档位覆盖 | 英一 20 分档 / 小作文 10 分档 | ✅ 分值表、档位区间、格式检测均正确（[报告](docs/validation/coverage-20261009/SUMMARY.md)） |
 
-### 工程回归（CI 每次 push 跑，173 项断言）
+### 工程回归（CI 每次 push 跑，182 项断言）
 
 | 套件 | 断言 | 守住什么 |
 |---|---|---|
-| `node app/test.mjs` | 100 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别、草稿恢复判定、成绩曲线统计与 SVG |
+| `node app/test.mjs` | 109 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别、草稿恢复判定、成绩曲线统计与 SVG、QR 编码（RS 标准向量 / 格式信息常量 / 回归 fixture） |
 | `node proxy/proxy-core.test.mjs` | 28 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、IPv6 归并、限速表不无界增长 |
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
 | `node app/static-server.test.mjs` | 27 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding、开发态/打包态白名单各放该放的 |
@@ -345,6 +369,8 @@ node app/parity.mjs                   # JS / Python 跨实现一致性
 node app/static-server.test.mjs       # 桌面壳静态服务器回归
 node scripts/check_readme.mjs         # README 自检
 node scripts/preview_shots.mjs        # 重新生成 README 用的界面截图页
+node scripts/verify_qr.mjs            # QR 跨实现比对 + 实际解码（需 npm install qrcode jsqr --no-save）
+node scripts/gen_qr_fixtures.mjs      # 重新生成 QR 回归 fixture
 cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task large <作文.txt>
 ```
 

@@ -58,7 +58,7 @@ const inject = (html, sel, content) => html.replace(sel, content);
 {
   let html = basePage();
   html = html.replace('<body>', '<body class="reviewing">');
-  html = inject(html, '<div id="report-area"></div>', `<div id="report-area">${renderReportHtml(final, facts, { model: 'MiniMax-M3.1-Flash-Preview' })}</div>`);
+  html = inject(html, '<div id="report-area"></div>', `<div id="report-area">${renderReportHtml(final, facts, { model: 'MiniMax-M3.1-Flash' })}</div>`);
   html = inject(html, '<div id="report-area">', '<div id="report-area">');
   // 复刻"只看终裁报告"的返回按钮
   html = html.replace('</div>\n\n<footer>', '<button class="icon-btn review-back">← 返回</button></div>\n\n<footer>');
@@ -84,7 +84,32 @@ const inject = (html, sel, content) => html.replace(sel, content);
   console.log('✓ docs/shots/settings.html');
 }
 
-/* ---------- ③ 历史成绩曲线 ---------- */
+/* ---------- ③ 分享成绩卡 ---------- */
+{
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DuoGrader · 分享卡片预览</title>
+<link rel="stylesheet" href="../../app/style.css" />
+<style>
+  body { margin: 0; padding: 0; background: var(--surface-2); display: flex; justify-content: flex-start; }
+  canvas { width: 1080px; height: auto; display: block; }
+</style></head>
+<body>
+<canvas id="c" width="1080" height="1440"></canvas>
+<script type="module">
+  import { drawShareCard, shareCardData } from '../../app/share-card.js';
+  const final = ${JSON.stringify(final)};
+  const facts = ${JSON.stringify(facts)};
+  const ctx = document.getElementById('c').getContext('2d');
+  drawShareCard(ctx, 1080, 1440, shareCardData(final, facts, { model: 'MiniMax-M3.1-Flash' }));
+</script>
+</body></html>`;
+  writeFileSync(path.join(OUT, 'share.html'), html, 'utf-8');
+  console.log('✓ docs/shots/share.html');
+}
+
+/* ---------- ④ 历史成绩曲线 ---------- */
 {
   // 示意图数据：得分率真实，篇数与日期为演示用（README 里会标明是示意图）
   const hist = [

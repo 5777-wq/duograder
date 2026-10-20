@@ -22,7 +22,7 @@ export const DEFAULTS = {
   RATE_MAX_KEYS: 20000,       // 限速表键数上限，超了整体清扫（防 isolate 内存无界增长）
   RATE_SWEEP_EVERY: 64,       // 每多少次写入清扫一次过期键
   UPSTREAM_BASE: 'https://api.minimaxi.com/v1',
-  UPSTREAM_MODEL: 'MiniMax-M3.1-Flash-Preview',
+  UPSTREAM_MODEL: 'MiniMax-M3.1-Flash',
   FREE_TTL: 60 * 60 * 24 * 180, // 180 天
   DAILY_TTL: 60 * 60 * 48,      // 48 小时
   DEFAULT_ORIGINS: ['https://duograder.pages.dev', '*.duograder.pages.dev'],

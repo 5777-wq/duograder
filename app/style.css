@@ -542,6 +542,21 @@ body.reviewing .input-section, body.reviewing #pipeline-card, body.reviewing #ba
 .anim-ok .banner { animation: bannerIn .22s var(--ease-out); }
 .banner.info { border-color: var(--ink); border-left-width: 3px; color: var(--ink-soft); }
 
+/* 报告头部的分享按钮 */
+.card h2 .btn-share {
+  margin-left: auto; border: 1px solid var(--hairline); background: var(--surface);
+  color: var(--ink-soft); font-family: var(--sans); font-size: 12px; font-weight: 500;
+  padding: 4px 12px; cursor: pointer; letter-spacing: 0;
+  transition: border-color .15s var(--ease-out), color .15s var(--ease-out);
+}
+.card h2 .btn-share:hover { border-color: var(--ink); color: var(--ink); }
+.card h2 .btn-share:active { background: var(--surface-2); }
+
+/* 分享卡片预览 */
+.share-preview { border: 1px solid var(--hairline); background: var(--surface-2); padding: 14px; margin-bottom: 12px; }
+.share-preview img { display: block; width: 100%; height: auto; box-shadow: none; }
+#modal-share .modal-card { width: min(420px, 100%); }
+
 footer { color: var(--muted); font-size: 12px; margin-top: 40px; line-height: 1.8; border-top: 1px solid var(--hairline); padding-top: 16px; }
 footer a { color: var(--ink-soft); }
 

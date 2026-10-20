@@ -1,6 +1,8 @@
 // core.js 回归测试：与 Python 脚本同口径（node test.mjs）
 import { readFileSync } from 'node:fs';
 import { countWords, precheck, snapHalfDown, parseModelJSON, validateReport, mergeSameBand, detectTaskType, transcriptionMessages, shouldSendDeviceId, dualRail, detectProviderByKey, keyLooksMismatched, buildDraft, draftIsRestorable, buildScoreCurve, renderScoreChart } from './core.js';
+import { qrMatrix, _internal } from './qrcode.js';
+const { rsEncode, formatInfoBits } = _internal;
 
 let failed = 0;
 const ok = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) failed++; };
@@ -216,6 +218,50 @@ console.log('成绩曲线 SVG');
   ok('空数据返回空图', renderScoreChart(buildScoreCurve([])).empty === true);
   const one = renderScoreChart(buildScoreCurve([{ id: 9, track: 'english-ii', task: 'large', final: { final_score: 9 } }]));
   ok('只有一条记录也能画（一个点）', !one.empty && (one.svg.match(/class="dg-point"/g) || []).length === 1);
+}
+
+console.log('QR 码编码（分享卡片要本地生成二维码，不能走第三方接口）');
+{
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/qr-cases.json', import.meta.url), 'utf-8'));
+  ok('回归 fixture 存在', Array.isArray(fx) && fx.length >= 6, `${fx && fx.length} 条`);
+  let same = 0;
+  for (const c of fx) {
+    const m = qrMatrix(c.text);
+    if (!m) { ok(`fixture ${c.text.slice(0, 24)} 可生成`, false); continue; }
+    const rows = m.modules.map((r) => r.map((v) => (v ? '#' : '.')).join(''));
+    const eq = m.size === c.size && m.mask === c.mask && rows.every((r, i) => r === c.rows[i]);
+    if (eq) same++; else ok(`fixture ${c.text.slice(0, 24)} 未漂移`, false, `尺寸 ${m.size}/${c.size} 掩码 ${m.mask}/${c.mask}`);
+  }
+  ok(`全部 ${fx.length} 条 fixture 未漂移`, same === fx.length, `一致 ${same}/${fx.length}`);
+}
+{
+  // 独立锚点 1：ISO/IEC 18004 的里德-所罗门标准测试向量
+  const rs = rsEncode([32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17], 10);
+  ok('里德-所罗门与 ISO 标准向量一致',
+    rs.join(',') === [196, 35, 39, 119, 235, 215, 231, 226, 93, 23].join(','), rs.join(' '));
+
+  // 独立锚点 2：已发表的格式信息常量（纠错等级 M + 掩码 0 → 101010000010010）
+  const fmt = formatInfoBits(0).slice().reverse().join('');
+  ok('格式信息与已发表常量一致（M + mask0）', fmt === '101010000010010', fmt);
+
+  // 独立锚点 3：自洽——格式信息能解回自己的掩码与纠错等级 M
+  // 注意位序：解掩码后 data 占据第 10-14 位，data = (纠错等级<<3) | 掩码
+  const m = qrMatrix('https://duograder.pages.dev/app/');
+  const bits = [];
+  for (let i = 0; i <= 5; i++) bits.push(m.modules[i][8] ? 1 : 0);
+  bits.push(m.modules[7][8] ? 1 : 0);
+  bits.push(m.modules[8][8] ? 1 : 0);
+  bits.push(m.modules[8][7] ? 1 : 0);
+  for (let i = 9; i < 15; i++) bits.push(m.modules[8][14 - i] ? 1 : 0);
+  let v = 0; for (let i = 0; i < 15; i++) v |= bits[i] << i;
+  v ^= 0x5412;
+  const data = (v >>> 10) & 0b11111;
+  ok('格式信息解出纠错等级为 M', ((data >>> 3) & 3) === 0, `解出 ${(data >>> 3) & 3}`);
+  ok('格式信息解出的掩码与实际用的一致', (data & 7) === m.mask, `解出 ${data & 7}，实际 ${m.mask}`);
+
+  ok('空内容返回 null', qrMatrix('') === null);
+  ok('超长内容返回 null（超过版本 6 容量）', qrMatrix('a'.repeat(200)) === null);
+  ok('短内容用小版本（21×21 = 版本 1）', qrMatrix('https://a.cn').size === 21);
 }
 
 console.log(failed ? `\n${failed} 项失败` : '\n全部通过');

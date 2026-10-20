@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
 PROXY = ROOT / "proxy"
 
-APP_FILES = ["index.html", "ui.js", "core.js", "style.css", "sw.js", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
+APP_FILES = ["index.html", "ui.js", "core.js", "qrcode.js", "share-card.js", "style.css", "sw.js", "logo.svg", "icon.png", "icon-192.png", "manifest.json"]
 # capacitor 运行时文件：同步 assets 时必须保留，不能当作过期副本删掉
 CAP_RUNTIME = {"cordova.js", "cordova_plugins.js", "capacitor.config.json", "capacitor.plugins.json"}
 

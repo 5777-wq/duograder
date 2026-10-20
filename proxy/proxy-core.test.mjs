@@ -26,7 +26,7 @@ function env(over = {}) {
   return {
     INVITE_CODE: 'secret-code',
     MINIMAX_API_KEY: 'sk-test-key',
-    UPSTREAM_MODEL: 'MiniMax-M3.1-Flash-Preview',
+    UPSTREAM_MODEL: 'MiniMax-M3.1-Flash',
     FREE_LIMIT: '2',
     ANON_DAILY_CAP: '100',
     FREE_KV: makeKV(),
@@ -99,14 +99,14 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
 {
   stubFetch(200);
   const e = env();
-  const r1 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }), e);
+  const r1 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
   ok('第 1 次匿名调用成功', r1.status === 200, r1.status);
   ok('响应头带回剩余次数', r1.headers.get('X-Free-Remaining') === '1', r1.headers.get('X-Free-Remaining'));
 
-  const r2 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }), e);
+  const r2 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
   ok('第 2 次匿名调用成功（FREE_LIMIT=2）', r2.status === 200, r2.status);
 
-  const r3 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }), e);
+  const r3 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
   ok('超配额返回 429', r3.status === 429, r3.status);
   const j3 = await r3.json();
   ok('429 文案说明额度用完', /额度已用完/.test(j3.error.message), j3.error.message);
@@ -115,7 +115,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   // 上游失败必须退额，否则一次上游抖动就吃掉用户一次免费额度
   stubFetch(500);
   const e = env();
-  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }), e);
+  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
   ok('上游 500 透传状态码', r.status === 500, r.status);
   const q = await handleProxy(
     new Request('https://duograder.pages.dev/v1/quota', { headers: { 'CF-Connecting-IP': '9.9.9.9' } }),
@@ -129,7 +129,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   stubFetch(200);
   const e = env();
   for (let i = 0; i < 4; i++) {
-    await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
+    await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
   }
   const q = await handleProxy(
     new Request('https://duograder.pages.dev/v1/quota', { headers: { Authorization: 'Bearer secret-code', 'CF-Connecting-IP': '8.8.8.8' } }),
@@ -141,7 +141,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   // 错误邀请码必须 401，不能当匿名放行
   stubFetch(200);
   const e = env();
-  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }, { Authorization: 'Bearer wrong' }), e);
+  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer wrong' }), e);
   ok('错误邀请码返回 401', r.status === 401, r.status);
 }
 
@@ -151,7 +151,7 @@ console.log('上游约束（模型白名单 + max_tokens 封顶）');
   stubFetch(200);
   const e = env();
   await handleProxy(postReq({ model: 'gpt-4o', messages: [], max_tokens: 999999 }), e);
-  ok('非白名单模型被强制回默认模型', lastUpstream.body.model === 'MiniMax-M3.1-Flash-Preview', lastUpstream.body.model);
+  ok('非白名单模型被强制回默认模型', lastUpstream.body.model === 'MiniMax-M3.1-Flash', lastUpstream.body.model);
   ok('max_tokens 被封顶到匿名上限', lastUpstream.body.max_tokens === DEFAULTS.ANON_MAX_TOKENS, lastUpstream.body.max_tokens);
   ok('上游地址写死', lastUpstream.url === 'https://api.minimaxi.com/v1/chat/completions', lastUpstream.url);
   ok('客户端原始头不透传（Authorization 是服务端 key）', lastUpstream.headers.Authorization === 'Bearer sk-test-key');
@@ -160,13 +160,13 @@ console.log('上游约束（模型白名单 + max_tokens 封顶）');
 {
   stubFetch(200);
   const e = env();
-  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [], max_tokens: 100 }), e);
+  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [], max_tokens: 100 }), e);
   ok('客户端更小的 max_tokens 保留', lastUpstream.body.max_tokens === 100, lastUpstream.body.max_tokens);
 }
 {
   stubFetch(200);
   const e = env();
-  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash-Preview', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
+  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
   ok('reasoning_effort 默认注入 high', lastUpstream.body.reasoning_effort === 'high', lastUpstream.body.reasoning_effort);
   ok('客户端显式给的 reasoning_effort 优先', true);
 }

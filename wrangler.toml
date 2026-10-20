@@ -18,7 +18,7 @@ compatibility_date = "2026-10-20"
 
 [vars]
 UPSTREAM_BASE = "https://api.minimaxi.com/v1"
-UPSTREAM_MODEL = "MiniMax-M3.1-Flash-Preview"
+UPSTREAM_MODEL = "MiniMax-M3.1-Flash"
 # CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配，不会误匹配 evil-example.com）。
 # 自建部署请改成自己的域名；填 * 等于放开所有来源，不要在公网这么干。
 ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"
