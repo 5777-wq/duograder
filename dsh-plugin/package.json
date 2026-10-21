@@ -2,7 +2,7 @@
   "name": "dsh-duograder",
   "version": "0.1.0",
   "description": "考研英语作文双评批改（DuoGrader）——把双盲阅卷 skill 装进 DeepSeek Harness：两位阅卷员独立盲评 + 分差仲裁 + 逐句精改 + 确定性预检。",
-  "icon": "assets/logo.png",
+  "icon": "logo.png",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -28,6 +28,7 @@
   },
   "files": [
     "lib",
+    "logo.png",
     "assets",
     "cordis.patch.yml",
     "README.md"

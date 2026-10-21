@@ -1,7 +1,7 @@
 // dsh-duograder 插件的回归测试。
 // 守住四件事：清单能被 DSH 认、provider 契约正确、skill 内容齐全、资源路径可解析。
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -69,6 +69,19 @@ t('files 白名单覆盖运行时必需产物', () => {
   for (const need of ['lib', 'assets', 'cordis.patch.yml']) {
     assert.ok(files.includes(need), `files 缺少 ${need}——装到用户机器上会缺文件`);
   }
+});
+
+// ---------- 1.5 包元信息（DSH 插件列表直接读） ----------
+t('声明了 icon 就必须真的存在，且在 files 白名单里', () => {
+  if (!pkg.icon) return; // 未声明则不检查
+  assert.ok(existsSync(join(here, pkg.icon)),
+    `icon 指向不存在的文件: ${pkg.icon}——DSH 会报「包元信息错误」`);
+  const files = pkg.files ?? [];
+  assert.ok(files.some(f => f === pkg.icon || pkg.icon.startsWith(f + "/")),
+    `icon 没有被 files 白名单覆盖: ${pkg.icon}——打包后会丢`);
+  const size = statSync(join(here, pkg.icon)).size;
+  assert.ok(size <= 256 * 1024, `icon 超过 256 KiB: ${size} bytes`);
+  assert.match(pkg.icon, /\.(svg|png|jpe?g|webp)$/i, `icon 格式不被支持: ${pkg.icon}`);
 });
 
 // ---------- 2. Cordis 插件契约 ----------
