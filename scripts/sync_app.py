@@ -12,6 +12,7 @@
   3. android/.../assets/public/          —— APK 内置资产（保留 capacitor 运行时文件）
   4. functions/v1/_proxy-core.js          —— Pages Functions 入口引用的实现副本
   5. workers/invite-proxy/_proxy-core.js  —— Workers 入口引用的实现副本
+  6. dsh-plugin/assets/                   —— DSH 插件包内置的 skill 快照（dsh plugin add 安装用）
 
 副本 4/5 必须与真源逐字节一致：两套代理历史上已经漂移过一次（Worker 缺匿名通道、
 免费额度与配额查询，Pages 缺 IPv6 归并），CI 用 `--check` 断言不漂移。
@@ -49,6 +50,10 @@ PROXY_COPIES = [
 # 桌面壳（Electron）打包需要 skill/ 进包：electron-builder 的 files 不能跨出 app/，
 # 所以在 app/ 下放一份构建期副本（真源仍是仓库根的 skill/）。
 DESKTOP_SKILL = ROOT / "app" / "skill"
+
+# DSH 插件包（dsh-duograder）要把 skill 随包分发：npm 只能发本包目录内的文件，
+# 所以在 dsh-plugin/assets/ 下放一份构建期副本（真源仍是仓库根的 skill/）。
+DSH_PLUGIN_ASSETS = ROOT / "dsh-plugin" / "assets"
 
 # 这些是本地跑脚本产生的中间物，不该进包（__pycache__ 的 .pyc 就有几十 KB）
 SKIP_DIRS = ("__pycache__", "*.pyc")
@@ -104,11 +109,53 @@ def check_desktop_skill() -> list:
     return drift
 
 
+def check_dsh_plugin_assets() -> list:
+    """dsh-plugin/assets/ 与真源 skill/ 的漂移清单。
+
+    与 app/skill/ 同样的取舍：这是构建期副本（已 gitignore），
+    全新克隆里本就不存在，不存在时无从检查、不算漂移；
+    一旦存在就必须与真源逐文件一致。
+    """
+    src = ROOT / "skill"
+    target = DSH_PLUGIN_ASSETS
+    if not src.exists():
+        return ["真源缺失: skill/"]
+    if not target.exists():
+        return []
+    drift = []
+
+    def walk(c):
+        if c.left_only:
+            drift.append(f"dsh-plugin/assets/ 缺少: {c.left_only}")
+        if c.right_only:
+            drift.append(f"dsh-plugin/assets/ 多余: {c.right_only}")
+        if c.diff_files:
+            drift.append(f"dsh-plugin/assets/ 内容不一致: {c.diff_files}")
+        for sub in c.subdirs.values():
+            walk(sub)
+
+    walk(filecmp.dircmp(src, target, ignore=list(SKIP_DIRS)))
+    return drift
+
+
 def sync_desktop_skill():
     if DESKTOP_SKILL.exists():
         shutil.rmtree(DESKTOP_SKILL)
     shutil.copytree(ROOT / "skill", DESKTOP_SKILL, ignore=shutil.ignore_patterns(*SKIP_DIRS))
     print("✓ app/skill/ 已同步（桌面壳打包用）")
+
+
+def sync_dsh_plugin_assets():
+    """把 skill/ 的快照同步进 DSH 插件包（dsh-plugin/assets/）。
+
+    真源 skill/kaoyan-essay/ 会变成 assets/kaoyan-essay/：插件宿主半侧按
+    ../assets/<skill名>/SKILL.md 定位，所以不能摊平、也不能多套一层 skill/。
+    """
+    if DSH_PLUGIN_ASSETS.exists():
+        shutil.rmtree(DSH_PLUGIN_ASSETS)
+    # 拷成 assets/<skill名>/SKILL.md：插件宿主半侧按这个相对结构定位资源。
+    shutil.copytree(ROOT / "skill", DSH_PLUGIN_ASSETS, ignore=shutil.ignore_patterns(*SKIP_DIRS))
+    print("✓ dsh-plugin/assets/ 已同步（DSH 插件包内置 skill）")
 
 
 def copy_app_files(dest: Path):
@@ -183,7 +230,7 @@ def main():
         sys.exit("找不到 proxy/ 真源目录")
 
     if CHECK_ONLY:
-        drift = check_proxy_copies() + check_desktop_skill()
+        drift = check_proxy_copies() + check_desktop_skill() + check_dsh_plugin_assets()
         if drift:
             for d in drift:
                 print(f"[失败] {d}")
@@ -197,6 +244,7 @@ def main():
     sync_apk_assets()
     sync_proxy_copies()
     sync_desktop_skill()
+    sync_dsh_plugin_assets()
     print("全部副本已与真源对齐。提交后 CI（apk.yml）自动构建 APK。")
 
 

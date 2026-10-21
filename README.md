@@ -108,6 +108,16 @@ cd app && npm ci && npm start
 
 ## 🤖 Agent Skill
 
+也可以安成 **DeepSeek Harness 插件**（一键装、随包分发、开箱即用）：
+
+```sh
+dsh plugin --profile web add dsh-duograder   # 桌面版请在应用内「设置 → 插件」里添加
+```
+
+插件源码在 [`dsh-plugin/`](dsh-plugin/)，详细说明见 [dsh-plugin/README.md](dsh-plugin/README.md)。
+
+> 💡 **DSH 上不退化**：DSH 原生带 `subagent`（`spawn` provider），子 agent 有独立上下文、看不到当前对话——两位阅卷员互不可见由宿主保证。
+
 适用于 Codex / Claude Code / ZCode 等支持 skill 的 agent：
 
 ```bash
@@ -118,7 +128,7 @@ git clone https://github.com/5777-wq/duograder.git
 
 内核本身是**宿主无关**的：`SKILL.md`（带标准 frontmatter）+ 评分规则 + 输出契约 + 版本化提示词 + 确定性脚本，五件套齐备，不绑定任何具体 provider。
 
-> ⚠️ **一个诚实的限制**：双盲的全部价值在于两位阅卷员互不可见。SKILL.md 第 4 步靠"并行派出两个独立 subagent"实现这一点——需要宿主支持 subagent。宿主不支持时按 SKILL.md 的降级条款由单上下文做两轮自评，**独立性弱于标准流程**，报告会明确标注。把"双盲执行"下沉到宿主之外（例如做成 MCP 工具，由服务端发两次互不可见的请求）是彻底解法，属下一步工作。
+> ⚠️ **一个诚实的限制**：双盲的全部价值在于两位阅卷员互不可见。SKILL.md 第 4 步靠"并行派出两个独立 subagent"实现这一点——需要宿主支持 subagent。宿主不支持时按 SKILL.md 的降级条款由单上下文做两轮自评，**独立性弱于标准流程**，报告会明确标注。在 **DeepSeek Harness** 上这条不成立：它自带 `subagent`（`spawn` provider），子 agent 的上下文天然隔离，装 [`dsh-plugin/`](dsh-plugin/) 即可。
 
 > 💰 **成本**：一次完整批改 = 3 次模型调用（双评 + 可能的仲裁）。按 DeepSeek / GLM 计价约一两分钱，一个备考季花不了一顿早饭。
 

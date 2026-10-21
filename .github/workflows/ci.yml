@@ -31,6 +31,11 @@ jobs:
       - name: 跨实现一致性（JS 与 Python 必须同口径）
         run: node app/parity.mjs
 
+      - name: DSH 插件回归（清单契约 / provider / 随包资源完整性）
+        run: |
+          python scripts/sync_app.py
+          node dsh-plugin/test.mjs
+
       - name: 副本无漂移（代理内核与 app/ 副本必须与真源一致）
         run: python scripts/sync_app.py --check
 
