@@ -1,0 +1,54 @@
+{
+  "name": "dsh-duograder",
+  "version": "0.1.0",
+  "description": "考研英语作文双评批改（DuoGrader）——把双盲阅卷 skill 装进 DeepSeek Harness：两位阅卷员独立盲评 + 分差仲裁 + 逐句精改 + 确定性预检。",
+  "icon": "assets/logo.png",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "skill",
+    "kaoyan",
+    "essay",
+    "grading"
+  ],
+  "homepage": "https://github.com/5777-wq/duograder#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/5777-wq/duograder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/5777-wq/duograder/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-skill": ">=0.1.5-rc.1 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-rc.2": "compatible"
+      }
+    }
+  }
+}
