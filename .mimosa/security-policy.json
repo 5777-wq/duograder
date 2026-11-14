@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "threatModel": {
+    "inherit": true,
+    "assets": [
+      "OpenCode Go API Key：只存在 Cloudflare 加密 secret（OPENCODE_API_KEY），前端与仓库不可见",
+      "邀请码：客户端只持邀请码，服务端用定长比较 + 错误次数限速校验",
+      "免费额度计数：按 IP 与设备指纹写入 KV"
+    ],
+    "attackerControlledInputs": [
+      "HTTP 请求体：OpenAI 兼容的 chat completions JSON（按设计转发给固定上游）",
+      "CF-Connecting-IP / X-Forwarded-For：只用于限速与配额计数",
+      "X-Device-Id：清洗后只用于配额计数",
+      "Authorization：邀请码候选值"
+    ],
+    "trustBoundaries": [
+      "浏览器 → Cloudflare Pages Function / Worker",
+      "Pages Function / Worker → opencode.ai（固定上游）"
+    ],
+    "securityInvariants": [
+      "上游协议必须是 https、主机必须是公网地址；生产固定为 opencode.ai，客户端不能指定",
+      "不跟随上游重定向",
+      "不转发客户端原始请求头，上游请求头由服务端逐个重建",
+      "模型白名单与 max_tokens 封顶在服务端强制执行",
+      "API Key 永不写入仓库或返回给客户端"
+    ],
+    "exclusions": [
+      "共享代理按设计把客户端 chat payload 转发到固定上游 opencode.ai；这是代理职责，不是 SSRF",
+      "skill 脚本是本机 CLI，按调用者给出的路径读写报告；不接收网络输入"
+    ]
+  },
+  "network": {
+    "allowedProtocols": [
+      "https:"
+    ],
+    "allowedHosts": [
+      "opencode.ai"
+    ],
+    "blockPrivateNetworks": true,
+    "maxRedirects": 0
+  },
+  "command": {
+    "forbidShell": false,
+    "allowedBinaries": []
+  },
+  "path": {
+    "allowedWriteRoots": [
+      "."
+    ],
+    "requireBasename": false
+  },
+  "data": {
+    "allowedSortFields": [],
+    "requireOwnerScope": true
+  }
+}

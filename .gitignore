@@ -40,5 +40,10 @@ android/app/src/main/res/xml/config.xml
 # README 界面截图页（由 scripts/preview_shots.mjs 生成，不入库；PNG 成品在 docs/assets/）
 docs/shots/
 
+# Mimosa 本地扫描产物（项目安全策略随仓库走）
+.mimosa/*
+!.mimosa/security-policy.json
+workers/invite-proxy/.mimosa/
+
 # 宣传视频的中间产物（几十 MB 的素材与渲染帧，不入库）
 docs/launch-video/

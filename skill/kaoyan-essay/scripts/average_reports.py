@@ -19,6 +19,7 @@ import json
 import math
 import re
 import sys
+from pathlib import Path
 
 # Windows 控制台默认 GBK：统一强制 UTF-8，避免与 precheck.py / validate_report.py 的输出对不上
 if hasattr(sys.stdout, "reconfigure"):
@@ -100,8 +101,7 @@ def main():
     }
     text = json.dumps(final, ensure_ascii=False, indent=2)
     if out_path:
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write(text)
+        Path(out_path).write_text(text, encoding="utf-8")
         print(f"已写出: {out_path}")
     print(f"终裁: 第{band_a}档 {total} 分 / {max_score}（维度均值和 {dim_sum:g}）")
     print(f"初评: A {score_a} / B {score_b}，分差 {final['score_gap']}")

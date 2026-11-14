@@ -601,7 +601,7 @@ async function runDiagnostics() {
     model = $('set-model').value.trim(); vmodel = $('set-vmodel').value.trim();
     push(true, '② 模型列表', `key 有效，共 ${knownIds.length} 个模型` + (fixes.length ? `，已自动纠正：${fixes.join('、')}` : ''));
   } catch (e) {
-    const m = /HTTP (\d+)/.exec(e.message);
+    const m = String(e.message).match(/HTTP (\d+)/);
     const fix = m && m[1] === '401'
       ? 'Key 不对或没生效：确认复制全了、末尾没带空格。有些平台不充值就直接 401。'
       : m && (m[1] === '403')
@@ -652,7 +652,7 @@ async function runDiagnostics() {
           push(true, '④ 视觉模型', `已自动换用 ${fixed}，认出"${out.trim().slice(0, 20)}"（红色）· ${Date.now() - t0}ms —— 拍照转写链路可用`);
         } catch (e2) { push(false, '④ 视觉模型', `换用 ${fixed} 后仍失败：${shortErr(e2.message)}`, '换个认图的型号，或留空让它用主模型（但主模型多半不认图，拍照会失败）'); }
       } else {
-        const m = /HTTP (\d+)/.exec(e.message);
+        const m = String(e.message).match(/HTTP (\d+)/);
         push(false, '④ 视觉模型', shortErr(e.message) + (m && m[1] === '400' ? '（这个型号不认图）' : ''),
           '换成多模态型号：glm-4v-flash / qwen-vl-plus / deepseek-flash / gpt-4o-mini；点「拉取模型列表」挑带 vision 的。');
       }
@@ -669,7 +669,7 @@ async function runDiagnostics() {
 
 // 主模型不通时给什么建议
 function modelFixHint(err, model) {
-  const m = /HTTP (\d+)/.exec(String(err.message));
+  const m = String(err.message).match(/HTTP (\d+)/);
   const code = m ? Number(m[1]) : 0;
   if (code === 401) return 'Key 不对或没生效：确认复制全了、没带空格。有些平台不充值直接 401。';
   if (code === 402 || code === 403) return '账户没余额或没权限：去控制台充值/开通该模型权限。';
@@ -689,14 +689,14 @@ function diagLine(ok, name, detail, fix) {
 }
 function shortErr(msg) {
   // 400 报错里服务商常附"可用型号清单"，解析成人话
-  const m = /supported API model names are ([^".]+)/i.exec(String(msg));
+  const m = String(msg).match(/supported API model names are ([^".]+)/i);
   if (m) return `模型名不存在，该账号可用：${m[1].split(/[,，]\s*/).slice(0, 4).join('、')}`;
-  const h = /HTTP (\d+)/.exec(String(msg));
+  const h = String(msg).match(/HTTP (\d+)/);
   return String(msg).slice(0, 90) + (h ? '：' + (httpErrorHint(Number(h[1])) || '') : '');
 }
 // 400 且报错带可用型号清单时：挑最接近的自动换上（写回输入框）并返回新名字
 async function tryFixFrom400(err, base, key, fieldId, knownIds) {
-  const m = /supported API model names are ([^".]+)/i.exec(String(err.message));
+  const m = String(err.message).match(/supported API model names are ([^".]+)/i);
   if (!m) return null;
   let cands = m[1].split(/[,，]\s*/).map((s) => s.trim()).filter(Boolean);
   if (knownIds) cands = cands.filter((c) => knownIds.includes(c)).length ? cands.filter((c) => knownIds.includes(c)) : cands;

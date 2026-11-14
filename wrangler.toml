@@ -2,7 +2,7 @@
 #
 # 部署顺序：
 #   1) python scripts/sync_app.py            # 生成 .pages-dist（Pages 输出目录）并同步代理内核副本
-#   2) wrangler pages secret put MINIMAX_API_KEY
+#   2) wrangler pages secret put OPENCODE_API_KEY
 #   3) wrangler pages secret put INVITE_CODE
 #   4) wrangler pages deploy
 #
@@ -17,8 +17,11 @@ pages_build_output_dir = ".pages-dist"
 compatibility_date = "2026-10-20"
 
 [vars]
-UPSTREAM_BASE = "https://api.minimaxi.com/v1"
-UPSTREAM_MODEL = "MiniMax-M3.1-Flash"
+# 上游：OpenCode Go 订阅计划（OpenAI 兼容）。Go 计划要求客户端自报 User-Agent 并带 x-opencode-session，
+# 代理已在共享内核里统一处理（缺 session 会被上游 400 拒绝）。
+UPSTREAM_BASE = "https://opencode.ai/inference/go/openai/v1"
+UPSTREAM_MODEL = "deepseek-v4.1-flash"
+UPSTREAM_VISION_MODEL = "deepseek-v4.1-flash"
 # CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配，不会误匹配 evil-example.com）。
 # 自建部署请改成自己的域名；填 * 等于放开所有来源，不要在公网这么干。
 ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"

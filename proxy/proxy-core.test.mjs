@@ -5,7 +5,7 @@
 //   · 配额先扣后调 + 上游失败退额（旧的"上游成功才计数"在并发下完全失效）
 //   · 模型白名单与 max_tokens 封顶（不能拿别人的 key 跑无上限生成）
 //   · IPv6 /64 归并、设备头清洗、限速表清理
-import { handleProxy, resolveIp, sanitizeDid, DEFAULTS } from './proxy-core.js';
+import { handleProxy, resolveIp, sanitizeDid, assertSafeUpstream, DEFAULTS } from './proxy-core.js';
 
 let failed = 0;
 const ok = (name, cond, extra) => {
@@ -25,8 +25,8 @@ function makeKV() {
 function env(over = {}) {
   return {
     INVITE_CODE: 'secret-code',
-    MINIMAX_API_KEY: 'sk-test-key',
-    UPSTREAM_MODEL: 'MiniMax-M3.1-Flash',
+    OPENCODE_API_KEY: 'sk-test-key',
+    UPSTREAM_MODEL: 'deepseek-v4.1-flash',
     FREE_LIMIT: '2',
     ANON_DAILY_CAP: '100',
     FREE_KV: makeKV(),
@@ -99,14 +99,14 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
 {
   stubFetch(200);
   const e = env();
-  const r1 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
+  const r1 = await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }), e);
   ok('第 1 次匿名调用成功', r1.status === 200, r1.status);
   ok('响应头带回剩余次数', r1.headers.get('X-Free-Remaining') === '1', r1.headers.get('X-Free-Remaining'));
 
-  const r2 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
+  const r2 = await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }), e);
   ok('第 2 次匿名调用成功（FREE_LIMIT=2）', r2.status === 200, r2.status);
 
-  const r3 = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
+  const r3 = await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }), e);
   ok('超配额返回 429', r3.status === 429, r3.status);
   const j3 = await r3.json();
   ok('429 文案说明额度用完', /额度已用完/.test(j3.error.message), j3.error.message);
@@ -115,7 +115,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   // 上游失败必须退额，否则一次上游抖动就吃掉用户一次免费额度
   stubFetch(500);
   const e = env();
-  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }), e);
+  const r = await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }), e);
   ok('上游 500 透传状态码', r.status === 500, r.status);
   const q = await handleProxy(
     new Request('https://duograder.pages.dev/v1/quota', { headers: { 'CF-Connecting-IP': '9.9.9.9' } }),
@@ -129,7 +129,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   stubFetch(200);
   const e = env();
   for (let i = 0; i < 4; i++) {
-    await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
+    await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
   }
   const q = await handleProxy(
     new Request('https://duograder.pages.dev/v1/quota', { headers: { Authorization: 'Bearer secret-code', 'CF-Connecting-IP': '8.8.8.8' } }),
@@ -141,7 +141,7 @@ console.log('匿名免费额度（先扣后调 + 失败退额）');
   // 错误邀请码必须 401，不能当匿名放行
   stubFetch(200);
   const e = env();
-  const r = await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer wrong' }), e);
+  const r = await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer wrong' }), e);
   ok('错误邀请码返回 401', r.status === 401, r.status);
 }
 
@@ -151,24 +151,98 @@ console.log('上游约束（模型白名单 + max_tokens 封顶）');
   stubFetch(200);
   const e = env();
   await handleProxy(postReq({ model: 'gpt-4o', messages: [], max_tokens: 999999 }), e);
-  ok('非白名单模型被强制回默认模型', lastUpstream.body.model === 'MiniMax-M3.1-Flash', lastUpstream.body.model);
+  ok('非白名单模型被强制回默认模型', lastUpstream.body.model === 'deepseek-v4.1-flash', lastUpstream.body.model);
   ok('max_tokens 被封顶到匿名上限', lastUpstream.body.max_tokens === DEFAULTS.ANON_MAX_TOKENS, lastUpstream.body.max_tokens);
-  ok('上游地址写死', lastUpstream.url === 'https://api.minimaxi.com/v1/chat/completions', lastUpstream.url);
+  ok('上游地址写死', lastUpstream.url === 'https://opencode.ai/inference/go/openai/v1/chat/completions', lastUpstream.url);
   ok('客户端原始头不透传（Authorization 是服务端 key）', lastUpstream.headers.Authorization === 'Bearer sk-test-key');
+  ok('自报客户端 User-Agent（Go 计划要求）', /^duograder-proxy\//.test(lastUpstream.headers['User-Agent'] || ''), lastUpstream.headers['User-Agent']);
+  ok('带 x-opencode-session（缺了上游 400）', /^dg-[0-9a-z]{1,12}$/.test(lastUpstream.headers['x-opencode-session'] || ''), lastUpstream.headers['x-opencode-session']);
   ok('强制非流式', lastUpstream.body.stream === false);
 }
 {
   stubFetch(200);
   const e = env();
-  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [], max_tokens: 100 }), e);
+  await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [], max_tokens: 100 }), e);
   ok('客户端更小的 max_tokens 保留', lastUpstream.body.max_tokens === 100, lastUpstream.body.max_tokens);
 }
 {
   stubFetch(200);
   const e = env();
-  await handleProxy(postReq({ model: 'MiniMax-M3.1-Flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
+  await handleProxy(postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer secret-code' }), e);
   ok('reasoning_effort 默认注入 high', lastUpstream.body.reasoning_effort === 'high', lastUpstream.body.reasoning_effort);
   ok('客户端显式给的 reasoning_effort 优先', true);
+}
+
+/* ---------------- 上游地址安全 ---------------- */
+console.log('上游地址安全（SSRF 纵深防御）');
+{
+  const allowed = ['https://opencode.ai/inference/go/openai/v1', 'https://api.example.com/v1'];
+  const rejected = [
+    'http://opencode.ai/inference/go/openai/v1',   // 非 https
+    'https://localhost/v1',                        // 环回
+    'https://127.0.0.1/v1',
+    'https://169.254.169.254/latest',              // 云元数据
+    'https://10.0.0.8/v1',
+    'https://172.20.0.1/v1',
+    'https://192.168.1.1/v1',
+    'https://100.64.0.1/v1',
+    'https://[::1]/v1',
+    'https://[fd00::1]/v1',
+    'https://metadata/v1',                         // 单标签主机名
+    'https://foo.internal/v1',
+    'https://user:pass@api.example.com/v1',        // 携带凭据
+    'https://api.example.com/v1?x=1',              // 查询串
+  ];
+  ok('默认上游拼出正确地址', assertSafeUpstream(DEFAULTS.UPSTREAM_BASE) === 'https://opencode.ai/inference/go/openai/v1/chat/completions');
+  for (const base of allowed) {
+    let pass = true;
+    try { assertSafeUpstream(base); } catch { pass = false; }
+    ok('放行公网 https：' + base, pass);
+  }
+  for (const base of rejected) {
+    let blocked = false;
+    try { assertSafeUpstream(base); } catch { blocked = true; }
+    ok('拒绝不安全上游：' + base, blocked);
+  }
+}
+{
+  // 环境变量被改成内网地址时，代理直接 500，且不发出任何请求
+  let called = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => { called++; return new Response('{}', { status: 200 }); };
+  const r = await handleProxy(
+    postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer secret-code' }),
+    env({ UPSTREAM_BASE: 'https://127.0.0.1:8080/v1' })
+  );
+  ok('不安全上游配置返回 500', r.status === 500, r.status);
+  ok('不安全上游不会被请求', called === 0, called);
+  globalThis.fetch = saved;
+}
+{
+  // 上游 3xx 不跟随（防重定向 SSRF）
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { Location: 'http://169.254.169.254/' } });
+  const r = await handleProxy(
+    postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer secret-code' }),
+    env()
+  );
+  ok('上游 302 时返回 502 而不是跟过去', r.status === 502, r.status);
+  globalThis.fetch = saved;
+}
+
+/* ---------------- 邀请码爆破 ---------------- */
+console.log('邀请码爆破防护');
+{
+  stubFetch(200);
+  const e = env();
+  let last;
+  for (let i = 0; i < 12; i++) {
+    last = await handleProxy(
+      postReq({ model: 'deepseek-v4.1-flash', messages: [] }, { Authorization: 'Bearer wrong' + i, 'CF-Connecting-IP': '203.0.113.7' }),
+      e
+    );
+  }
+  ok('连续错码 10 次后被限速', last.status === 429, last.status);
 }
 
 /* ---------------- 限速表清理 ---------------- */

@@ -190,9 +190,9 @@ git clone https://github.com/5777-wq/duograder.git
 - `functions/v1/` —— **Cloudflare Pages Functions**（主路径，与网页同域 `duograder.pages.dev/v1`，国内可直连）
 - `workers/invite-proxy/` —— **Cloudflare Worker**（备用路径，海外 / 自托管参考）
 
-两者共用同一份实现 `proxy/proxy-core.js`（真源），副本由 `scripts/sync_app.py` 同步，CI 断言二者与真源逐字节一致——历史上这两套曾经漂移过一次（Worker 缺匿名通道、免费额度与配额查询，Pages 缺 IPv6 归并）。
+两者共用同一份实现 `proxy/proxy-core.js` + `proxy/upstream.js`（真源），副本由 `scripts/sync_app.py` 同步，CI 断言二者与真源逐字节一致——历史上这两套曾经漂移过一次（Worker 缺匿名通道、免费额度与配额查询，Pages 缺 IPv6 归并）。
 
-> **内置算力的阅卷模型已升级到正式版 `MiniMax-M3.1-Flash`**（此前是 `MiniMax-M3.1-Flash-Preview`）。官方模型列表已于 2026-10-19 去掉 Preview 后缀；M3.1 Flash 相比 M3 输入/输出单价降了一半以上、速度提升近 3 倍，1M 上下文、文本与图片输入。前端预设与两套代理的 `UPSTREAM_MODEL` 都已同步更新（代理侧有模型白名单，会强制回默认模型，所以两边必须一起改）。
+> **内置算力已从 MiniMax 官方直连切换到 OpenCode Go 订阅计划**，阅卷模型为 `deepseek-v4.1-flash`（OpenAI 兼容，支持文本 + 图片输入与深度推理）。Go 计划要求客户端自报 `User-Agent` 并带 `x-opencode-session`（代理按实例生成稳定值，缺了会被上游直接 400）。前端预设与两套代理的 `UPSTREAM_MODEL` 必须一起改（代理侧有模型白名单，会强制回默认模型）。
 
 | 方式 | 怎么用 | 额度 |
 |---|---|---|
@@ -204,7 +204,8 @@ git clone https://github.com/5777-wq/duograder.git
 ### 安全设计
 
 - **API Key 只存服务端加密 secret**，前端和仓库里永远只有一个邀请码占位
-- **上游地址写死**，客户端无法指定目标；**不转发客户端原始头**，逐个重建
+- **上游地址写死**，发请求前还校验协议与主机（只允许 https + 公网地址，拒绝环回/私网/链路本地/云元数据），且**不跟随重定向**；**不转发客户端原始头**，逐个重建
+- **邀请码错误更严限速**：错码 10 次 / 10 分钟即 429，并做定长比较——5 位邀请码不能靠高频试出来
 - **模型白名单**：客户端不能借你的 key 调用任意模型
 - **max_tokens 封顶**（匿名 12k / 邀请码 32k）：限制单次成本，防止免费额度被拿去跑无上限生成
 - **配额先扣后调，上游失败退额**：并发请求不会同时越过配额检查
@@ -216,7 +217,7 @@ git clone https://github.com/5777-wq/duograder.git
 
 ```bash
 python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
-wrangler pages secret put MINIMAX_API_KEY
+wrangler pages secret put OPENCODE_API_KEY
 wrangler pages secret put INVITE_CODE
 wrangler pages deploy
 ```
@@ -303,7 +304,7 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 这一节写的是"改动时必须遵守的规矩"，也是这个仓库最容易被人改坏的地方。
 
 **① 单一真源，副本由脚本生成**
-`app/` 是前端的唯一真源，`proxy/proxy-core.js` 是代理的唯一真源。所有副本（`.pages-dist/`、`www/`、APK 资产、`functions/v1/_proxy-core.js`、`workers/invite-proxy/_proxy-core.js`、`app/skill/`）都由 `scripts/sync_app.py` 生成，**不要手工改副本**。CI 用 `python scripts/sync_app.py --check` 断言无漂移。
+`app/` 是前端的唯一真源，`proxy/proxy-core.js` 与 `proxy/upstream.js` 是代理的唯一真源。所有副本（`.pages-dist/`、`www/`、APK 资产、`functions/v1/_proxy-core.js`、`functions/v1/upstream.js`、`workers/invite-proxy/_proxy-core.js`、`workers/invite-proxy/upstream.js`、`app/skill/`）都由 `scripts/sync_app.py` 生成，**不要手工改副本**。CI 用 `python scripts/sync_app.py --check` 断言无漂移。
 
 **② 同一套内核，两种实现，必须同口径**
 `app/core.js`（JS）与 `skill/kaoyan-essay/scripts/`（Python）是同一套规则的两份实现。`app/parity.mjs` 会在 CI 里断言：预检事实清单逐字段一致、报告校验的失败项数一致、同档合并的终裁分与退出语义一致。历史上它们悄悄漂移过三处，导致同一份报告在网页端通过、在 Skill 端被打回——**现在这类漂移会直接让 CI 变红**。
@@ -341,12 +342,12 @@ Key 与全部批改数据只存在**你的浏览器/手机本地**（localStorag
 | 5 | 句级种子查全率 | 预植错误检出 | ✅ 内核 v1.0 92% → v1.3 **100%**，误报 0（[记录](docs/validation/kernel-eval-20261009/SUMMARY.md)） |
 | 6 | 跨档位覆盖 | 英一 20 分档 / 小作文 10 分档 | ✅ 分值表、档位区间、格式检测均正确（[报告](docs/validation/coverage-20261009/SUMMARY.md)） |
 
-### 工程回归（CI 每次 push 跑，182 项断言）
+### 工程回归（CI 每次 push 跑，205 项断言）
 
 | 套件 | 断言 | 守住什么 |
 |---|---|---|
 | `node app/test.mjs` | 109 | 字数口径、预检、JSON 容错解析、报告校验、同档合并、题型识别、反模板黑名单、汇聚尺刻度、Key 前缀识别、草稿恢复判定、成绩曲线统计与 SVG、QR 编码（RS 标准向量 / 格式信息常量 / 回归 fixture） |
-| `node proxy/proxy-core.test.mjs` | 28 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、IPv6 归并、限速表不无界增长 |
+| `node proxy/proxy-core.test.mjs` | 51 | CORS 放行与 expose、配额先扣后调与退额、模型白名单、max_tokens 封顶、OpenCode Go 会话头与 UA、上游 SSRF 防护（拒绝私网/环回/元数据与重定向）、邀请码爆破限速、IPv6 归并、限速表不无界增长 |
 | `node app/parity.mjs` | 18 | **JS 与 Python 必须同口径**：预检事实清单逐字段一致、校验失败项数一致、合并终裁分与退出语义一致 |
 | `node app/static-server.test.mjs` | 27 | 桌面壳本地端口不暴露 `.git/` 与 `data/`、路径穿越（含同前缀兄弟目录与 URL 编码）被拒、非法百分号编码不崩、Host 校验防 DNS rebinding、开发态/打包态白名单各放该放的 |
 | `python scripts/sync_app.py --check` | 1 项检查 | 副本与真源无漂移（代理内核 + 桌面壳的 `app/skill/`） |
@@ -388,7 +389,7 @@ cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task la
 
 | 流水线 | 触发 | 产出 |
 |---|---|---|
-| `ci.yml` | 每次 push / PR | 173 项断言 + 副本漂移检查 + README 自检 + 评分脚本冒烟 |
+| `ci.yml` | 每次 push / PR | 205 项断言 + 副本漂移检查 + README 自检 + 评分脚本冒烟 |
 | `apk.yml` | `app/` `android/` `skill/` 变更 | 安卓 APK（artifact） |
 | `desktop.yml` | push 到 main / 打 `v*` 标签 | Windows 便携版 exe；标签推送时挂到 Release |
 
@@ -396,7 +397,7 @@ cd skill/kaoyan-essay && python scripts/precheck.py --track english-ii --task la
 
 ```bash
 python scripts/sync_app.py                                   # 生成 .pages-dist（只含 app/+skill/+跳转页）+ 同步代理副本
-wrangler pages secret put MINIMAX_API_KEY
+wrangler pages secret put OPENCODE_API_KEY
 wrangler pages secret put INVITE_CODE
 wrangler pages deploy
 ```

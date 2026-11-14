@@ -58,7 +58,7 @@ const inject = (html, sel, content) => html.replace(sel, content);
 {
   let html = basePage();
   html = html.replace('<body>', '<body class="reviewing">');
-  html = inject(html, '<div id="report-area"></div>', `<div id="report-area">${renderReportHtml(final, facts, { model: 'MiniMax-M3.1-Flash' })}</div>`);
+  html = inject(html, '<div id="report-area"></div>', `<div id="report-area">${renderReportHtml(final, facts, { model: 'deepseek-v4.1-flash' })}</div>`);
   html = inject(html, '<div id="report-area">', '<div id="report-area">');
   // 复刻"只看终裁报告"的返回按钮
   html = html.replace('</div>\n\n<footer>', '<button class="icon-btn review-back">← 返回</button></div>\n\n<footer>');
@@ -102,7 +102,7 @@ const inject = (html, sel, content) => html.replace(sel, content);
   const final = ${JSON.stringify(final)};
   const facts = ${JSON.stringify(facts)};
   const ctx = document.getElementById('c').getContext('2d');
-  drawShareCard(ctx, 1080, 1440, shareCardData(final, facts, { model: 'MiniMax-M3.1-Flash' }));
+  drawShareCard(ctx, 1080, 1440, shareCardData(final, facts, { model: 'deepseek-v4.1-flash' }));
 </script>
 </body></html>`;
   writeFileSync(path.join(OUT, 'share.html'), html, 'utf-8');

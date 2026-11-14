@@ -45,6 +45,9 @@ CAP_RUNTIME = {"cordova.js", "cordova_plugins.js", "capacitor.config.json", "cap
 PROXY_COPIES = [
     (PROXY / "proxy-core.js", ROOT / "functions" / "v1" / "_proxy-core.js"),
     (PROXY / "proxy-core.js", ROOT / "workers" / "invite-proxy" / "_proxy-core.js"),
+    # 上游出站请求单独一层（见 proxy/upstream.js），两套入口各带一份副本
+    (PROXY / "upstream.js", ROOT / "functions" / "v1" / "upstream.js"),
+    (PROXY / "upstream.js", ROOT / "workers" / "invite-proxy" / "upstream.js"),
 ]
 
 # 桌面壳（Electron）打包需要 skill/ 进包：electron-builder 的 files 不能跨出 app/，

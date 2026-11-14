@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 
 
 def norm(s: str) -> str:
@@ -93,11 +94,12 @@ def main():
     for f_ in fp_candidates:
         print(f"  [误报候选] {f_}...")
 
-    json.dump({
+    out_path = Path(args.report + ".eval.json")
+    out_path.write_text(json.dumps({
         "seeds": n, "detected": len(detected), "missed": [m["id"] for m in missed],
         "wrong_severity": [w["id"] for w in wrong],
         "fp_candidates": fp_candidates, "recall": round(recall, 2),
-    }, open(args.report + ".eval.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"评估明细已写入 {args.report}.eval.json")
     sys.exit(0 if not missed else 1)
 

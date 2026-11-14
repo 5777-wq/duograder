@@ -5,18 +5,19 @@
 #
 # 部署：
 #   wrangler deploy
-#   wrangler secret put MINIMAX_API_KEY
+#   wrangler secret put OPENCODE_API_KEY
 #   wrangler secret put INVITE_CODE
 #
-# 密钥（MINIMAX_API_KEY / INVITE_CODE）用 `wrangler secret put` 设置，绝不写进本文件。
+# 密钥（OPENCODE_API_KEY / INVITE_CODE）用 `wrangler secret put` 设置，绝不写进本文件。
 name = "duograder-proxy"
 main = "worker.js"
 compatibility_date = "2026-10-20"
 
 [vars]
-UPSTREAM_BASE = "https://api.minimaxi.com/v1"
-UPSTREAM_MODEL = "MiniMax-M3.1-Flash"
-UPSTREAM_VISION_MODEL = "MiniMax-M3.1-Flash"
+# 上游：OpenCode Go 订阅计划（OpenAI 兼容）。Go 计划要求自报 User-Agent + 每会话 x-opencode-session。
+UPSTREAM_BASE = "https://opencode.ai/inference/go/openai/v1"
+UPSTREAM_MODEL = "deepseek-v4.1-flash"
+UPSTREAM_VISION_MODEL = "deepseek-v4.1-flash"
 # CORS 白名单：逗号分隔，支持 *.example.com 通配（按域分量匹配）
 ALLOWED_ORIGINS = "https://duograder.pages.dev,*.duograder.pages.dev"
 FREE_LIMIT = "50"

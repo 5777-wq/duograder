@@ -5,11 +5,13 @@
 // （Worker 缺匿名通道/免费额度/配额查询，Pages 缺 IPv6 归并）。
 //
 // 安全设计（两套入口一致）：
-//   · 上游地址写死，客户端无法指定目标；不转发客户端原始头
+//   · 上游地址写死且发请求前校验协议/主机，客户端无法指定目标；不转发客户端原始头
 //   · API Key 只存服务端 secret；客户端只持邀请码
 //   · 匿名通道有免费额度配额（按 IP + 设备双计数）与全站每日上限
 //   · 匿名/登录通道都做模型白名单与 max_tokens 封顶，避免拿别人的 key 跑无上限生成
 //   · CORS 白名单只放行本应用来源；自定义头与响应头都正确 expose
+
+import { postUpstream } from './upstream.js';
 
 export const DEFAULTS = {
   FREE_LIMIT: 50,             // 每 IP/设备免费次数
@@ -21,8 +23,11 @@ export const DEFAULTS = {
   RATE_MAX: 120,              // 每 IP 每窗口最大请求数
   RATE_MAX_KEYS: 20000,       // 限速表键数上限，超了整体清扫（防 isolate 内存无界增长）
   RATE_SWEEP_EVERY: 64,       // 每多少次写入清扫一次过期键
-  UPSTREAM_BASE: 'https://api.minimaxi.com/v1',
-  UPSTREAM_MODEL: 'MiniMax-M3.1-Flash',
+  BAD_CODE_MAX: 10,           // 每 IP 每窗口允许的邀请码错误次数（5 位码必须卡爆破）
+  UPSTREAM_BASE: 'https://opencode.ai/inference/go/openai/v1',
+  UPSTREAM_MODEL: 'deepseek-v4.1-flash',
+  UPSTREAM_VISION_MODEL: 'deepseek-v4.1-flash', // V4.1 Flash 本身支持图片输入，图文共用同一模型
+  UPSTREAM_UA: 'duograder-proxy/1.0 (+https://duograder.pages.dev)',
   FREE_TTL: 60 * 60 * 24 * 180, // 180 天
   DAILY_TTL: 60 * 60 * 48,      // 48 小时
   DEFAULT_ORIGINS: ['https://duograder.pages.dev', '*.duograder.pages.dev'],
@@ -82,13 +87,18 @@ export function sanitizeDid(v) {
   return String(v || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
 }
 
-function makeRateLimiter() {
+// 从请求头取设备指纹并清洗：读 header 与后续 KV 计数分开，职责更清楚也便于测试
+function deviceIdOf(request) {
+  return sanitizeDid(request.headers.get('X-Device-Id'));
+}
+
+function makeRateLimiter(max = DEFAULTS.RATE_MAX, win = DEFAULTS.RATE_WINDOW_MS) {
   const buckets = (globalThis.__dg_rl ||= new Map());
   let sinceSweep = 0;
   return (ip) => {
-    const now = Date.now(), win = DEFAULTS.RATE_WINDOW_MS;
+    const now = Date.now();
     const arr = (buckets.get(ip) || []).filter((t) => now - t < win);
-    const limited = arr.length >= DEFAULTS.RATE_MAX;
+    const limited = arr.length >= max;
     if (!limited) arr.push(now);
     buckets.set(ip, arr);
     // 定期清扫过期键：否则每个新 IP 都在 Map 里留一条永不过期的记录，长驻 isolate 下无界增长
@@ -131,9 +141,8 @@ function withLock(fn) {
   return run;
 }
 
-async function quotaInfo(env, ip, did, limit) {
-  const ipN = await readCount(env, 'free:' + ip);
-  const devN = did ? await readCount(env, 'dev:' + did) : 0;
+// 纯函数：计数由调用方先读好再传进来，便于单测与复用
+function quotaInfo(ipN, devN, limit) {
   const used = Math.max(ipN, devN);
   return { limit, used, remaining: Math.max(0, limit - used) };
 }
@@ -177,6 +186,67 @@ async function refund(env, ip, did) {
 
 /* ---------------- 上游 ---------------- */
 
+// 上游地址安全校验（纵深防御）：只允许 https + 公网主机。
+// 上游地址由服务端配置、客户端无法指定；但配置被改错或环境变量被污染时，代理也不能变成打内网/云元数据的跳板。
+function isPublicHost(raw) {
+  const host = String(raw || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (!host) return false;
+  // 单标签主机名（metadata / intranet / 无点域名）一律拒绝；正常上游都是带点的域名
+  if (!host.includes('.') && !host.includes(':')) return false;
+  if (/(^|\.)(localhost|local|internal|home\.arpa)$/.test(host)) return false;
+
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const a = Number(v4[1]), b = Number(v4[2]);
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;       // 本网络 / 私网 / 环回 / 组播与保留
+    if (a === 169 && b === 254) return false;                              // 链路本地（云元数据 169.254.169.254）
+    if (a === 172 && b >= 16 && b <= 31) return false;                     // 172.16/12
+    if (a === 192 && b === 168) return false;                              // 192.168/16
+    if (a === 100 && b >= 64 && b <= 127) return false;                    // CGNAT 100.64/10
+    if (a === 198 && (b === 18 || b === 19)) return false;                 // 基准测试保留段
+    return true;
+  }
+  if (host.includes(':')) {
+    if (host === '::1' || host === '::') return false;                     // 环回 / 未指定
+    if (host.startsWith('fe80') || host.startsWith('fc') || host.startsWith('fd')) return false; // 链路本地 / ULA
+    if (host.startsWith('::ffff:')) return isPublicHost(host.slice(7));    // 映射的 IPv4
+    return true;
+  }
+  return true;
+}
+
+// 返回拼好 /chat/completions 的绝对地址；不安全就直接抛错（由调用方转成 500）
+export function assertSafeUpstream(base) {
+  let u;
+  try { u = new URL(String(base || '')); } catch { throw new Error('上游地址不是合法 URL'); }
+  if (u.protocol !== 'https:') throw new Error('上游地址必须是 https');
+  if (u.username || u.password) throw new Error('上游地址不允许携带凭据');
+  if (u.search || u.hash) throw new Error('上游地址不允许带查询串或锚点');
+  if (!isPublicHost(u.hostname)) throw new Error('上游地址指向内网/环回/保留地址，已拒绝');
+  return u.origin + u.pathname.replace(/\/+$/, '') + '/chat/completions';
+}
+
+// OpenCode Go 要求每个会话带 x-opencode-session，缺了直接 400 MissingSessionID。
+// 代理无状态：按 isolate 生成一个稳定会话串——同一实例内的连续请求共享路由与缓存，
+// 且不把请求头/设备指纹（不可信输入）带进上游请求。
+export function sessionIdFor() {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return 'dg-' + c.randomUUID().replace(/[^a-z0-9]/gi, '').slice(0, 12);
+  const b = new Uint8Array(8);
+  c.getRandomValues(b);
+  return 'dg-' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 12);
+}
+const UPSTREAM_SESSION = sessionIdFor();
+
+// 邀请码定长比较：避免按字符提前返回的时序差异（5 位码更不能送额外信息）
+function safeEqual(a, b) {
+  const x = String(a || ''), y = String(b || '');
+  if (!x || x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
 function allowedModels(env, opts) {
   const fromEnv = [env.UPSTREAM_MODEL, env.UPSTREAM_VISION_MODEL].filter(Boolean);
   const fromOpts = (opts && opts.models) || [];
@@ -211,37 +281,59 @@ export async function handleProxy(request, env, opts = {}) {
   const limit = Number(env.FREE_LIMIT) || DEFAULTS.FREE_LIMIT;
   const dailyCap = Number(env.ANON_DAILY_CAP) || DEFAULTS.ANON_DAILY_CAP;
   const ip = resolveIp(request);
-  const did = sanitizeDid(request.headers.get('X-Device-Id'));
+  const did = deviceIdOf(request);
 
   const rateLimited = makeRateLimiter();
   if (rateLimited(ip)) return json({ error: { message: '请求过于频繁，请稍后再试。' } }, 429, cors);
 
   const code = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  const authed = !!code && !!env.INVITE_CODE && code === env.INVITE_CODE;
+  const authed = !!code && !!env.INVITE_CODE && safeEqual(code, env.INVITE_CODE);
   const anonymous = !code;
   // 带了码但不对 → 401；完全不带码 → 匿名免费额度通道
-  if (!authed && !anonymous) return json({ error: { message: MSG_BAD_CODE } }, 401, cors);
+  if (!authed && !anonymous) {
+    // 5 位邀请码经不起高频爆破：错误尝试单独按更严的阈值限速
+    const badCodeLimited = makeRateLimiter(DEFAULTS.BAD_CODE_MAX);
+    if (badCodeLimited('badcode:' + ip)) {
+      return json({ error: { message: '邀请码错误次数过多，请 10 分钟后再试。' } }, 429, cors);
+    }
+    return json({ error: { message: MSG_BAD_CODE } }, 401, cors);
+  }
 
-  const url = new URL(request.url);
+  const reqUrl = new URL(request.url);
   const models = allowedModels(env, opts);
 
   // 免费额度查询（只读不计数）
-  if (request.method === 'GET' && url.pathname.endsWith('/quota')) {
+  if (request.method === 'GET' && reqUrl.pathname.endsWith('/quota')) {
     if (authed) return json({ unlimited: true }, 200, cors);
     if (!env.FREE_KV) return json({ error: { message: '免费额度未配置' } }, 404, cors);
-    return json(await quotaInfo(env, ip, did, limit), 200, cors);
+    const ipN = await readCount(env, 'free:' + ip);
+    const devN = did ? await readCount(env, 'dev:' + did) : 0;
+    return json(quotaInfo(ipN, devN, limit), 200, cors);
   }
 
   // 型号清单不打上游，直接回报内置型号（供前端「拉取模型/诊断」链路）
-  if (request.method === 'GET' && url.pathname.endsWith('/models')) {
+  if (request.method === 'GET' && reqUrl.pathname.endsWith('/models')) {
     return json({ object: 'list', data: models.map((id) => ({ id, object: 'model' })) }, 200, cors);
   }
 
-  if (request.method === 'POST' && url.pathname.endsWith('/chat/completions')) {
+  if (request.method === 'POST' && reqUrl.pathname.endsWith('/chat/completions')) {
+    const apiKey = env.OPENCODE_API_KEY;
+    if (!apiKey) {
+      console.error('[dg] OPENCODE_API_KEY 未配置');
+      return json({ error: { message: '服务端未配置上游密钥，请联系站点管理员。' } }, 503, cors);
+    }
+    let upstreamUrl;
+    try {
+      upstreamUrl = assertSafeUpstream(opts.upstreamBase || env.UPSTREAM_BASE || DEFAULTS.UPSTREAM_BASE);
+    } catch (e) {
+      console.error('[dg] 上游地址被拒绝：' + e.message);
+      return json({ error: { message: '服务端上游配置异常，请联系站点管理员。' } }, 500, cors);
+    }
+
     let reserved = null;
     if (!authed) {
-      if (!env.MINIMAX_API_KEY || !env.FREE_KV) {
-        return json({ error: { message: MSG_BAD_CODE } }, 401, cors);
+      if (!env.FREE_KV) {
+        return json({ error: { message: '免费试用通道暂未开放，请点右上角「登录」输入邀请码。' } }, 503, cors);
       }
       reserved = await reserve(env, ip, did, limit, dailyCap);
       if (!reserved.ok) {
@@ -252,7 +344,6 @@ export async function handleProxy(request, env, opts = {}) {
       }
     }
 
-    const upstreamBase = (opts.upstreamBase || env.UPSTREAM_BASE || DEFAULTS.UPSTREAM_BASE).replace(/\/+$/, '');
     try {
       const raw = await request.text();
       if (raw.length > DEFAULTS.MAX_BODY) {
@@ -272,12 +363,18 @@ export async function handleProxy(request, env, opts = {}) {
           maxTokens: authed ? DEFAULTS.AUTHED_MAX_TOKENS : DEFAULTS.ANON_MAX_TOKENS,
         });
       }
-      const resp = await fetch(upstreamBase + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.MINIMAX_API_KEY },
-        body: JSON.stringify(payload),
-      });
+      const resp = await postUpstream(upstreamUrl, {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + apiKey,
+        // OpenCode Go 的客户端要求：自报身份 + 每个会话带 session；缺 x-opencode-session 会被 400 拒绝
+        'User-Agent': DEFAULTS.UPSTREAM_UA,
+        'x-opencode-session': UPSTREAM_SESSION,
+      }, JSON.stringify(payload));
       // 上游失败不消耗额度
+      if (resp.status >= 300 && resp.status < 400) {
+        if (reserved) await refund(env, ip, did);
+        return json({ error: { message: '上游返回重定向，已拒绝跟随。' } }, 502, cors);
+      }
       if (reserved && resp.status !== 200) await refund(env, ip, did);
       const headers = { 'Content-Type': resp.headers.get('Content-Type') || 'application/json', ...cors };
       if (reserved) {
