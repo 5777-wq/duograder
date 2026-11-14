@@ -227,16 +227,22 @@ export function assertSafeUpstream(base) {
 }
 
 // OpenCode Go 要求每个会话带 x-opencode-session，缺了直接 400 MissingSessionID。
-// 代理无状态：按 isolate 生成一个稳定会话串——同一实例内的连续请求共享路由与缓存，
+// 代理无状态：按 isolate 惰性生成一个稳定会话串（同一实例内的连续请求共享路由与缓存），
 // 且不把请求头/设备指纹（不可信输入）带进上游请求。
+// 注意：Cloudflare 禁止在全局作用域生成随机数，所以只能首次进 handler 时再生成。
+let upstreamSession = '';
 export function sessionIdFor() {
+  if (upstreamSession) return upstreamSession;
   const c = globalThis.crypto;
-  if (c?.randomUUID) return 'dg-' + c.randomUUID().replace(/[^a-z0-9]/gi, '').slice(0, 12);
-  const b = new Uint8Array(8);
-  c.getRandomValues(b);
-  return 'dg-' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 12);
+  if (c?.randomUUID) {
+    upstreamSession = 'dg-' + c.randomUUID().replace(/[^a-z0-9]/gi, '').slice(0, 12);
+  } else {
+    const b = new Uint8Array(8);
+    c.getRandomValues(b);
+    upstreamSession = 'dg-' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 12);
+  }
+  return upstreamSession;
 }
-const UPSTREAM_SESSION = sessionIdFor();
 
 // 邀请码定长比较：避免按字符提前返回的时序差异（5 位码更不能送额外信息）
 function safeEqual(a, b) {
@@ -368,7 +374,7 @@ export async function handleProxy(request, env, opts = {}) {
         Authorization: 'Bearer ' + apiKey,
         // OpenCode Go 的客户端要求：自报身份 + 每个会话带 session；缺 x-opencode-session 会被 400 拒绝
         'User-Agent': DEFAULTS.UPSTREAM_UA,
-        'x-opencode-session': UPSTREAM_SESSION,
+        'x-opencode-session': sessionIdFor(),
       }, JSON.stringify(payload));
       // 上游失败不消耗额度
       if (resp.status >= 300 && resp.status < 400) {
