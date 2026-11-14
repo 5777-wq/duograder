@@ -1,0 +1,25 @@
+# ============================================================================
+# dsh-duograder 的 bundle patch —— 把 DuoGrader skill 挂进 DSH 配置树
+# ============================================================================
+#
+# 【这是什么】
+#   DSH 启动时按 bundle 层栈把各插件的 patch 叠成配置树。本文件是
+#   dsh-duograder 这一层的内容：往树里插入一个插件行。
+#
+# 【工作原理】
+#   - insert：往配置树里添加新的 entry
+#   - id 必须全局唯一且与包名一致（DSH STORE 上架契约按它比对 entryIds）
+#   - name: 'dsh-duograder' 会解析到本包的 lib/index.js（宿主半侧）
+#   - 宿主半侧 apply() 调 ctx.skills.registerProvider()，把 kaoyan-essay
+#     注册为内置 skill 提供方；技能正文来自 assets/kaoyan-essay/，
+#     由 scripts/sync_app.py 从仓库根的 skill/（唯一真源）同步而来。
+#
+# 【重要】插件行那一行（"id: 值"）绝不能写行尾注释：商城预检
+#   （check-plugin-submission.mjs）用正则抓该行的值并要求其后直接换行，
+#   行尾注释会让它抓不到 entry ID，整份提交被判 SUBMISSION_ENTRY_MISSING。
+#
+# ============================================================================
+
+- insert:
+    - id: dsh-duograder
+      name: 'dsh-duograder'

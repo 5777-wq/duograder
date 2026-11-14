@@ -151,7 +151,7 @@ export function parseModelJSON(text) {
       err = e;
       // "Unexpected non-whitespace character after JSON at position N"
       // → JSON 本体在 N 处已结束，后面是模型的注释文字，直接截断重试
-      const m = /after JSON at position (\d+)/.exec(e.message || '');
+      const m = String(e.message || '').match(/after JSON at position (\d+)/);
       if (m) {
         try { return { ok: true, obj: JSON.parse(c.slice(0, Number(m[1]))) }; }
         catch (e2) { err = e2; }
@@ -777,7 +777,7 @@ export const PRESETS = [
   // invite=邀请码模式：走分享者的 Pages Function 代理（api key 存服务端，前端只持邀请码）。
   // 同域 duograder.pages.dev 国内可直连；备用 Worker（workers.dev）仅作海外/自托管参考。
   // blurb=给新手的"选哪个"（仿主流 harness 的 provider 选择器）；keyUrl=去拿 Key 的控制台。
-  { id: 'invite', name: '邀请码 · 内置算力', status: 'ok', baseURL: 'https://duograder.pages.dev/v1', model: 'MiniMax-M3.1-Flash', vmodel: 'MiniMax-M3.1-Flash',
+  { id: 'invite', name: '邀请码 · 内置算力', status: 'ok', baseURL: 'https://duograder.pages.dev/v1', model: 'deepseek-v4.1-flash', vmodel: 'deepseek-v4.1-flash',
     blurb: '什么都不用配，每 IP 免费批改 50 次', keyUrl: '' },
   { id: 'deepseek', name: 'DeepSeek 官方', status: 'ok', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat', vmodel: 'deepseek-flash',
     blurb: '最便宜，中文批改性价比高 · 新手首选', keyUrl: 'https://platform.deepseek.com/api_keys', keyRe: /^sk-[A-Za-z0-9]{32}$/ },
